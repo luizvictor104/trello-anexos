@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Baixar Anexos — conector</title>
+<!--
+  Esta é a "connector page": o Trello carrega este arquivo num iframe
+  escondido e conversa com ele por postMessage. Ela não aparece para
+  ninguém — só declara o que o Power-Up sabe fazer.
+  É a URL desta página que vai no campo "Iframe connector URL" em
+  https://trello.com/power-ups/admin
+-->
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<script src="js/config.js"></script>
+</head>
+<body>
+<script>
+"use strict";
+
+// O Trello acrescenta ?color=hex ao ícone, então ele precisa ser
+// um SVG que use currentColor (é o caso do nosso icone.svg).
+const ICONE = window.location.origin + window.location.pathname.replace(/index\.html$/, "") + "icone.svg";
+
+TrelloPowerUp.initialize({
+  "card-buttons": function (t) {
+    return [{
+      icon: ICONE,
+      text: "Baixar anexos",
+      condition: "edit",
+      callback: function (t) {
+        return t.modal({
+          url: "./baixar.html",
+          title: "Baixar anexos do cartão",
+          height: 540,
+          accentColor: "#0079BF"
+        });
+      }
+    }];
+  }
+}, {
+  appKey: TRELLO_APP_KEY,
+  appName: APP_NOME
+});
+</script>
+</body>
+</html>

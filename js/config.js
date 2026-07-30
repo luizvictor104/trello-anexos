@@ -1,0 +1,15 @@
+/* ─────────────────────────────────────────────────────────────
+   CONFIGURAÇÃO — o único arquivo que você precisa editar.
+
+   Pegue a chave em:  https://trello.com/power-ups/admin
+   → abra o seu Power-Up → aba "API Key" → "Generate a new API key"
+
+   A chave de API do Trello é pública por natureza: ela identifica
+   o Power-Up, não você. Quem dá acesso aos seus dados é o TOKEN,
+   que nasce quando você clica em "Autorizar" e fica só no seu
+   navegador. Por isso não tem problema esta chave ficar no código.
+   ───────────────────────────────────────────────────────────── */
+
+const TRELLO_APP_KEY = "COLE_SUA_CHAVE_AQUI";
+
+const APP_NOME = "Baixar Anexos";
