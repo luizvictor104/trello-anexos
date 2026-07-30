@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AtDownloader — board</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#fff; --bg2:#f4f5f7; --ink:#172b4d; --ink2:#5e6c84; --linha:#dfe1e6;
+  --azul:#0079bf; --azul2:#005a8c; --verde:#61bd4f; --vermelho:#eb5a46; --amarelo:#f2d600;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#1d2125; --bg2:#22272b; --ink:#b6c2cf; --ink2:#8c9bab; --linha:#2c333a;
+         --azul:#579dff; --azul2:#85b8ff; }
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  display:flex; flex-direction:column; height:100vh;
+}
+.topo{padding:14px 16px 10px; border-bottom:1px solid var(--linha); flex:none}
+.topo h1{font-size:15px; margin:0 0 3px; font-weight:600}
+.topo p{margin:0; font-size:12.5px; color:var(--ink2)}
+.corpo{flex:1; overflow-y:auto; padding:6px 16px}
+.rodape{
+  flex:none; padding:12px 16px; border-top:1px solid var(--linha); background:var(--bg2);
+  display:flex; gap:10px; align-items:center;
+}
+button{font:inherit; font-weight:500; border:0; border-radius:3px; cursor:pointer;
+  padding:9px 16px; background:var(--azul); color:#fff}
+button:hover:not(:disabled){background:var(--azul2)}
+button:disabled{opacity:.5; cursor:default}
+
+.cartao{display:flex; align-items:flex-start; gap:11px; padding:11px 2px; border-bottom:1px solid var(--linha)}
+.cartao:last-child{border-bottom:0}
+.cartao input{width:16px; height:16px; accent-color:var(--azul); flex:none; cursor:pointer; margin-top:2px}
+.cartao .meio{flex:1; min-width:0}
+.cartao .nome{font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.cartao .det{font-size:12px; color:var(--ink2); margin-top:1px}
+.cartao .estado{flex:none; font-size:12px; color:var(--ink2); min-width:80px; text-align:right}
+.ok{color:var(--verde)} .erro{color:var(--vermelho)}
+.aviso{background:var(--bg2); border:1px solid var(--linha); border-left:3px solid var(--amarelo);
+  border-radius:3px; padding:11px 13px; margin:12px 0; font-size:13px; line-height:1.5}
+.centro{text-align:center; padding:34px 20px; color:var(--ink2)}
+.centro b{display:block; color:var(--ink); font-size:15px; margin-bottom:6px}
+.marcar{font-size:12.5px; color:var(--ink2); padding:8px 2px; display:flex; gap:12px}
+.marcar button{background:none; color:var(--azul); padding:0; font-size:12.5px; font-weight:400}
+.marcar button:hover{background:none; text-decoration:underline}
+a{color:var(--azul)}
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <h1 id="titulo">Carregando…</h1>
+  <p id="sub"></p>
+</div>
+
+<div class="corpo" id="corpo">
+  <div class="centro">Procurando cartões com anexos…</div>
+</div>
+
+<div class="rodape" id="rodape" hidden>
+  <button id="baixar">Baixar .zip</button>
+  <span id="progresso" style="font-size:12.5px;color:var(--ink2);flex:1"></span>
+</div>
+
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/zip.js"></script>
+<script>
+"use strict";
+
+const t = window.TrelloPowerUp.iframe({ appKey: TRELLO_APP_KEY, appName: APP_NOME });
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+
+let board = null, cartoes = [], token = null;
+
+const kb = n => {
+  if (n == null || !isFinite(n)) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n/1024).toFixed(0) + " KB";
+  return (n/1048576).toFixed(1).replace(".", ",") + " MB";
+};
+const escapar = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function ehArquivo(a){
+  if (typeof a.bytes === "number" && a.bytes > 0) return true;
+  return /\/attachments\/[a-f0-9]{24}\/download\//i.test(a.url || "");
+}
+const cabecalhoAuth = () =>
+  ({ Authorization: `OAuth oauth_consumer_key="${TRELLO_APP_KEY}", oauth_token="${token}"` });
+
+const urlDownload = (idCartao, a) =>
+  `https://api.trello.com/1/cards/${idCartao}/attachments/${a.id}/download/${encodeURIComponent(a.fileName || a.name || "arquivo")}`;
+
+const comLimite = (p, ms) => Promise.race([
+  p, new Promise((_, rej) => setTimeout(() => rej(new Error("SEM_CONTEXTO")), ms))
+]);
+
+function telaCentro(html){ $("#corpo").innerHTML = `<div class="centro">${html}</div>`; }
+
+/* ---------- carregar ---------- */
+async function carregar(){
+  if (!TRELLO_APP_KEY || TRELLO_APP_KEY === "COLE_SUA_CHAVE_AQUI") {
+    $("#titulo").textContent = "Falta configurar a chave";
+    return telaCentro(`<b>O arquivo js/config.js ainda está com o texto de exemplo.</b>
+      Pegue a chave em <a href="https://trello.com/apps/admin" target="_blank">trello.com/apps/admin</a>.`);
+  }
+
+  try {
+    const api = t.getRestApi();
+    if (!(await comLimite(api.isAuthorized(), 8000))) {
+      $("#titulo").textContent = "Autorização necessária";
+      telaCentro(`<b>Preciso da sua permissão para ler os anexos.</b>
+        A permissão é de <b>leitura</b> e fica guardada só neste navegador.
+        <div style="margin-top:16px"><button id="autorizar">Autorizar</button></div>`);
+      $("#autorizar").onclick = async () => {
+        try { await t.getRestApi().authorize({ scope: "read", expiration: "never" }); carregar(); }
+        catch (e) { telaCentro(`<b>Não consegui autorizar.</b> ${escapar(e && e.message || "")}`); }
+      };
+      return;
+    }
+    token = await api.getToken();
+  } catch (e) {
+    if (e && e.message === "SEM_CONTEXTO") {
+      $("#titulo").textContent = "Abra pelo Trello";
+      return telaCentro(`<b>Esta página só funciona dentro de um board.</b>
+        Ela não guarda dado nenhum: quem entrega as informações é o Trello,
+        e só quando ela é aberta pelo botão <b>AtDownloader</b> no cabeçalho do board.`);
+    }
+    return telaCentro(`<b>Não consegui falar com a API do Trello.</b>
+      Confira se a chave em config.js é a mesma do Power-Up instalado.`);
+  }
+
+  board = await t.board("id", "name");
+
+  let brutos;
+  try {
+    const r = await fetch(
+      `https://api.trello.com/1/boards/${board.id}/cards?attachments=true&fields=name&filter=visible`,
+      { headers: cabecalhoAuth() }
+    );
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    brutos = await r.json();
+  } catch (e) {
+    return telaCentro(`<b>Não consegui listar os cartões.</b> ${escapar(e.message || "")}
+      <div style="margin-top:14px"><button onclick="location.reload()">Tentar de novo</button></div>`);
+  }
+
+  cartoes = brutos
+    .map(c => {
+      const anexos = (c.attachments || []).map(a => ({
+        id: a.id, nome: a.fileName || a.name || "arquivo", bytes: a.bytes,
+        url: a.url, data: a.date ? new Date(a.date) : new Date(), arquivo: ehArquivo(a)
+      }));
+      return { id: c.id, nome: c.name, anexos, marcado: true };
+    })
+    .filter(c => c.anexos.length);
+
+  if (!cartoes.length) {
+    $("#titulo").textContent = board.name || "Board";
+    return telaCentro("<b>Nenhum cartão deste board tem anexos.</b>Nada para baixar aqui.");
+  }
+  telaLista();
+}
+
+function totalBytes(c){ return c.anexos.reduce((s,a) => s + (a.bytes||0), 0); }
+
+function telaLista(){
+  const arquivos = cartoes.reduce((s,c) => s + c.anexos.filter(a=>a.arquivo).length, 0);
+  const bytes = cartoes.reduce((s,c) => s + totalBytes(c), 0);
+
+  $("#titulo").textContent = board.name || "Board";
+  $("#sub").textContent = `${cartoes.length} cartão${cartoes.length===1?"":"es"} com anexo · ${arquivos} arquivo${arquivos===1?"":"s"} · ${kb(bytes)}`;
+
+  let html = `<div class="marcar">
+      <button onclick="marcarTodos(true)">Marcar todos</button>
+      <button onclick="marcarTodos(false)">Desmarcar todos</button>
+    </div>`;
+
+  html += cartoes.map((c, i) => {
+    const arq = c.anexos.filter(a=>a.arquivo).length;
+    const lnk = c.anexos.length - arq;
+    return `<label class="cartao">
+      <input type="checkbox" data-i="${i}" ${c.marcado?"checked":""}>
+      <span class="meio">
+        <span class="nome">${escapar(c.nome)}</span>
+        <span class="det">${arq} arquivo${arq===1?"":"s"}${lnk?` · ${lnk} link${lnk===1?"":"s"}`:""} · ${kb(totalBytes(c))}</span>
+      </span>
+      <span class="estado" id="e${i}"></span>
+    </label>`;
+  }).join("");
+
+  if (bytes > 500*1024*1024) {
+    html += `<div class="aviso"><b>São mais de 500 MB no total.</b> O zip é montado na
+      memória do navegador. Desmarque alguns cartões e baixe em levas.</div>`;
+  }
+  html += `<div class="aviso">Cada cartão vira uma <b>pasta dentro do zip</b>, com o nome do cartão.</div>`;
+
+  $("#corpo").innerHTML = html;
+  $("#rodape").hidden = false;
+  $("#corpo").addEventListener("change", e => {
+    const cb = e.target.closest("input[type=checkbox]");
+    if (cb) { cartoes[+cb.dataset.i].marcado = cb.checked; atualizarBotao(); }
+  });
+  atualizarBotao();
+}
+
+window.marcarTodos = v => {
+  cartoes.forEach(c => c.marcado = v);
+  $$("#corpo input[type=checkbox]").forEach(c => c.checked = v);
+  atualizarBotao();
+};
+
+function atualizarBotao(){
+  const n = cartoes.filter(c => c.marcado).length;
+  $("#baixar").disabled = n === 0;
+  $("#baixar").textContent = n === 0 ? "Baixar .zip" : `Baixar ${n} cartão${n===1?"":"es"} em .zip`;
+}
+
+/* ---------- baixar ---------- */
+$("#baixar").onclick = async () => {
+  const alvos = cartoes.filter(c => c.marcado);
+  $("#baixar").disabled = true;
+  $$("#corpo input").forEach(c => c.disabled = true);
+
+  // "Baixar de novo" recomeça limpo
+  cartoes.forEach((c, i) => {
+    c.falhou = false; c.anexos.forEach(a => a.falhou = false);
+    const e = $("#e" + i); if (e) { e.textContent = ""; e.className = "estado"; }
+  });
+  const caixaAntiga = $("#planoB-box"); if (caixaAntiga) caixaAntiga.remove();
+
+  const prontos = [];
+  let falhas = 0, baixados = 0;
+  const totalArquivos = alvos.reduce((s,c) => s + c.anexos.filter(a=>a.arquivo).length, 0);
+
+  for (const c of alvos) {
+    const i = cartoes.indexOf(c);
+    const est = $("#e" + i);
+    const links = [];
+    let okCartao = 0;
+
+    for (const a of c.anexos) {
+      if (!a.arquivo) { links.push(`${a.nome}\n${a.url}\n`); continue; }
+      if (est) est.textContent = `${okCartao}/${c.anexos.filter(x=>x.arquivo).length}`;
+      try {
+        const r = await fetch(urlDownload(c.id, a), { headers: cabecalhoAuth() });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        prontos.push({ nome: a.nome, dados: new Uint8Array(await r.arrayBuffer()), data: a.data, pasta: c.nome });
+        okCartao++;
+      } catch (e) {
+        falhas++; c.falhou = true; a.falhou = true;   // marca o anexo, não só o cartão
+        console.error("anexo", c.nome, a.nome, e);
+      }
+      baixados++;
+      $("#progresso").textContent = `${baixados} de ${totalArquivos} arquivos`;
+    }
+
+    if (links.length) {
+      prontos.push({ nome: "_links.txt", dados: new TextEncoder().encode(links.join("\n")), data: new Date(), pasta: c.nome });
+    }
+    if (est) {
+      est.textContent = c.falhou ? "parcial" : "✓";
+      est.className = "estado " + (c.falhou ? "erro" : "ok");
+    }
+  }
+
+  if (!prontos.length) {
+    $("#progresso").innerHTML = `<span class="erro">Nenhum anexo baixou.</span>`;
+    mostrarPlanoB(alvos);
+    $("#baixar").disabled = false;
+    return;
+  }
+
+  const zip = ZipSimples.criarZip(prontos);
+  const blob = new Blob([zip], { type: "application/zip" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = ZipSimples.nomeSeguro(board.name || "board") + " — anexos.zip";
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
+
+  $("#progresso").innerHTML = falhas
+    ? `<span class="erro">${falhas} falhou(ram)</span> · ${prontos.length} no zip`
+    : `<span class="ok">Pronto — ${prontos.length} arquivos no zip</span>`;
+  if (falhas) mostrarPlanoB(alvos.filter(c => c.falhou));
+  $("#baixar").disabled = false;
+  $("#baixar").textContent = "Baixar de novo";
+  $$("#corpo input").forEach(c => c.disabled = false);
+};
+
+function mostrarPlanoB(lista){
+  // só o que realmente falhou — não os anexos que baixaram bem
+  // num cartão que teve alguma falha
+  const urls = lista.flatMap(c => c.anexos.filter(a => a.falhou).map(a => a.url));
+  if (!urls.length) return;
+  const antigo = $("#planoB-box"); if (antigo) antigo.remove();
+  const div = document.createElement("div");
+  div.className = "aviso"; div.id = "planoB-box";
+  div.innerHTML = `<b>Plano B:</b> abrir os anexos em abas e salvar pelo navegador —
+    ali quem autentica é a sua sessão do Trello. Pode ser preciso liberar pop-ups.
+    <div style="margin-top:10px"><button id="planoB">Abrir ${urls.length} aba${urls.length===1?"":"s"}</button></div>`;
+  $("#corpo").prepend(div);
+  $("#planoB").onclick = () => urls.forEach((u, n) =>
+    setTimeout(() => window.open(u, "_blank", "noopener"), n * 350));
+}
+
+carregar().catch(e => {
+  console.error(e);
+  telaCentro(`<b>Algo deu errado.</b> ${escapar(e && e.message || "")}`);
+});
+</script>
+</body>
+</html>

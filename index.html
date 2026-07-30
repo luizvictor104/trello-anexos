@@ -22,6 +22,23 @@
 const ICONE = window.location.origin + window.location.pathname.replace(/index\.html$/, "") + "icone.svg";
 
 TrelloPowerUp.initialize({
+  // Botão no cabeçalho do board: baixa de vários cartões de uma vez.
+  // Fica à vista, diferente do botão de cartão, que a interface nova do
+  // Trello esconde atrás do ícone de foguete no rodapé do cartão.
+  "board-buttons": function (t) {
+    return [{
+      icon: { dark: ICONE, light: ICONE },
+      text: "AtDownloader",
+      callback: function (t) {
+        return t.modal({
+          url: "./cartoes.html",
+          title: "Baixar anexos do board",
+          fullscreen: true,
+          accentColor: "#0079BF"
+        });
+      }
+    }];
+  },
   "card-buttons": function (t) {
     return [{
       icon: ICONE,

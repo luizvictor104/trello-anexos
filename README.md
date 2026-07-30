@@ -1,6 +1,10 @@
 # AtDownloader — Power-Up para Trello
 
-Adiciona um botão **"Baixar anexos"** dentro do cartão. Ele lista tudo que está anexado, você escolhe o que quer, e sai **um .zip só**.
+Baixa anexos do Trello em **um .zip só**. Tem duas portas de entrada:
+
+**No cabeçalho do board** — botão `AtDownloader`. Lista todos os cartões que têm anexo, você marca os que quiser, e baixa tudo de uma vez. Cada cartão vira uma pasta dentro do zip.
+
+**Dentro de um cartão** — botão `Baixar anexos`, para quando você quer só aquele cartão. Atenção: na interface nova do Trello, os botões de Power-Up ficam **escondidos atrás do ícone de foguete 🚀**, na barra no rodapé do cartão. Foi por isso que o botão do board virou o caminho principal.
 
 - Nomes com acento saem certos no Windows, Mac e Linux (flag UTF-8 do ZIP)
 - Anexos de mesmo nome não se sobrescrevem: viram `arquivo (2).pdf`
@@ -12,7 +16,8 @@ Adiciona um botão **"Baixar anexos"** dentro do cartão. Ele lista tudo que est
 | Arquivo | Papel |
 |---|---|
 | `index.html` | Página conectora. É a URL que vai no admin do Trello. Não tem interface — só declara o botão. |
-| `baixar.html` | A janela que abre ao clicar. Lista, baixa e monta o zip. |
+| `cartoes.html` | A janela do botão do board: lista os cartões com anexo e baixa vários de uma vez. |
+| `baixar.html` | A janela do botão do cartão: lista os anexos daquele cartão. |
 | `js/config.js` | **O único arquivo que você edita.** Sua chave de API. |
 | `js/zip.js` | Escritor de ZIP sem dependência externa. |
 | `icone.svg` | Ícone do botão. |
@@ -34,7 +39,9 @@ Trello só carrega Power-Up por `https://`. GitHub Pages resolve de graça:
 1. Vá em [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → **New**
 2. Nome: `AtDownloader` — precisa ser **igual** ao `APP_NOME` em `js/config.js`. Escolha o Workspace.
 3. Em **Iframe connector URL**, cole a URL do passo 1 (a pasta, ou `.../index.html`)
-4. Na aba **Capabilities**, ligue **`card-buttons`**
+4. Na aba **Capabilities**, ligue **`board-buttons`** e **`card-buttons`**
+
+   A aba Capabilities só aparece **depois** que a Iframe connector URL está preenchida e salva — sem ela o Trello trata o app como integração de API, não como Power-Up.
 5. Na aba **API Key**, clique em **Generate a new API key** e copie
 
 ### 3. Cole a chave

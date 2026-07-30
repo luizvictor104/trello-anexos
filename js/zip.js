@@ -82,12 +82,19 @@
     });
   }
 
+  /* Caminho dentro do zip. A pasta é sanitizada em separado para que a
+     barra sobreviva — é ela que faz o descompactador criar a subpasta. */
+  function caminho(a) {
+    const arq = nomeSeguro(a.nome);
+    return a.pasta ? nomeSeguro(a.pasta) + "/" + arq : arq;
+  }
+
   /**
-   * @param {Array<{nome:string, dados:Uint8Array, data?:Date}>} arquivos
+   * @param {Array<{nome:string, dados:Uint8Array, data?:Date, pasta?:string}>} arquivos
    * @returns {Uint8Array} o zip pronto
    */
   function criarZip(arquivos) {
-    const nomes = desduplicar(arquivos.map(a => nomeSeguro(a.nome)));
+    const nomes = desduplicar(arquivos.map(caminho));
     const itens = arquivos.map((a, i) => {
       const nomeBytes = utf8(nomes[i]);
       const dados = a.dados instanceof Uint8Array ? a.dados : new Uint8Array(a.dados);
