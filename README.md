@@ -43,6 +43,13 @@ Trello só carrega Power-Up por `https://`. GitHub Pages resolve de graça:
 
    A aba Capabilities só aparece **depois** que a Iframe connector URL está preenchida e salva — sem ela o Trello trata o app como integração de API, não como Power-Up.
 5. Na aba **API Key**, clique em **Generate a new API key** e copie
+6. **Ainda na aba API Key**, em **Allowed Origins**, adicione a origem de onde o Power-Up é servido:
+
+   ```
+   https://luizvictor104.github.io
+   ```
+
+   Só o domínio — sem caminho e sem barra final. **Esta etapa não é opcional:** com a lista de origens vazia, `authorize()` falha com *"Invalid return_url. The return URL should match the application's allowed origins"*. Curinga `*` foi descontinuado pelo Trello e é ignorado.
 
 ### 3. Cole a chave
 
@@ -67,6 +74,16 @@ No board: menu → Power-Ups → adicione o seu. Abra um cartão com anexos e cl
 - **A tela inteira**, com o Trello simulado: listagem, tamanhos, marcar/desmarcar, progresso, um anexo falhando de propósito, o zip resultante (conferi as 5 entradas, o `(2)` do duplicado e o `_links.txt`) e o Plano B.
 
 **Não deu para testar:** a chamada autenticada real. Ela exige conta no Trello, chave de API e a URL hospedada — as três coisas suas. Um detalhe em aberto: a resposta **401** que a API devolve não traz o cabeçalho CORS, embora o preflight traga. Se por acaso a resposta de sucesso também não trouxer, o `fetch` vai falhar e o **Plano B** entra automaticamente (abre cada anexo numa aba, autenticando pelo cookie da sua sessão). Você vai descobrir no primeiro clique: ou vem o zip, ou vem o Plano B.
+
+## Problemas conhecidos na configuração
+
+| Sintoma | Causa | Correção |
+|---|---|---|
+| `Invalid return_url` ao autorizar | Allowed Origins vazio na aba API Key | Adicione `https://luizvictor104.github.io` |
+| Aba **Capabilities** não existe | Iframe connector URL ainda não preenchida — sem ela o Trello trata o app como integração de API, não Power-Up | Preencha e salve a connector URL |
+| Botão não aparece no cartão | Não é bug: a interface nova do Trello esconde os botões de Power-Up atrás do ícone de **foguete 🚀** na barra do rodapé do cartão | Clique no foguete |
+| Botão não aparece no cabeçalho do board | Capability `board-buttons` desligada, ou conector em cache | Ligue em Capabilities e recarregue com Cmd+Shift+R |
+| Mudança publicada não aparece | Cache do navegador nos arquivos do GitHub Pages | Cmd+Shift+R |
 
 ## Limites
 
