@@ -113,6 +113,17 @@ function cabecalhoAuth(){
   return { Authorization: `OAuth oauth_consumer_key="${TRELLO_APP_KEY}", oauth_token="${token}"` };
 }
 
+/* Distinguir os dois modos de falha é o que decide a solução:
+   - TypeError sem status  -> o navegador barrou (CORS/rede). Nenhum
+     ajuste de header resolve; é preciso outro caminho para os bytes.
+   - HTTP com status       -> a requisição chegou ao Trello e ele recusou.
+     401/403 = credencial, 404 = URL errada. */
+function descreverErro(e){
+  if (e && e.status) return `HTTP ${e.status}`;
+  if (e instanceof TypeError) return "bloqueado pelo navegador (CORS)";
+  return (e && e.message) || "desconhecido";
+}
+
 /* ---------- telas ---------- */
 function telaCentro(html){ $("#corpo").innerHTML = `<div class="centro">${html}</div>`; }
 
@@ -257,8 +268,8 @@ $("#baixar").onclick = async () => {
   document.querySelectorAll("#corpo input").forEach(c => c.disabled = true);
 
   // "Baixar de novo" começa do zero: limpa o resultado da rodada anterior
-  itens.forEach(i => { i.falhou = false; });
-  const caixaAntiga = $("#planoB-box"); if (caixaAntiga) caixaAntiga.remove();
+  itens.forEach(i => { i.falhou = false; i.erro = null; });
+  ["#planoB-box", "#diag-box"].forEach(s => { const el = $(s); if (el) el.remove(); });
   itens.forEach((_, idx) => {
     const e = $("#e" + idx); if (e) { e.textContent = ""; e.className = "estado"; }
   });
@@ -274,13 +285,14 @@ $("#baixar").onclick = async () => {
     if (est) est.textContent = "baixando…";
     try {
       const r = await fetch(urlDownload(i), { headers: cabecalhoAuth() });
-      if (!r.ok) throw new Error("HTTP " + r.status);
+      if (!r.ok) { const err = new Error("HTTP " + r.status); err.status = r.status; throw err; }
       const dados = new Uint8Array(await r.arrayBuffer());
       prontos.push({ nome: i.nome, dados, data: i.data });
       if (est) { est.textContent = "✓"; est.className = "estado ok"; }
     } catch (e) {
       falhas++;
       i.falhou = true;
+      i.erro = descreverErro(e);
       if (est) { est.textContent = "falhou"; est.className = "estado erro"; }
       console.error("anexo", i.nome, e);
     }
@@ -296,6 +308,10 @@ $("#baixar").onclick = async () => {
   if (!prontos.length) {
     $("#progresso").innerHTML = `<span class="erro">Nenhum anexo baixou.</span>`;
     mostrarPlanoB();
+    mostrarDiagnostico();
+    $("#baixar").disabled = false;
+    $("#baixar").textContent = "Tentar de novo";
+    document.querySelectorAll("#corpo input").forEach(c => c.disabled = false);
     return;
   }
 
@@ -311,7 +327,7 @@ $("#baixar").onclick = async () => {
   $("#progresso").innerHTML = falhas
     ? `<span class="erro">${falhas} falhou(ram)</span> · ${prontos.length} no zip`
     : `<span class="ok">Pronto — ${prontos.length} no zip</span>`;
-  if (falhas) mostrarPlanoB();
+  if (falhas) { mostrarPlanoB(); mostrarDiagnostico(); }
   $("#baixar").disabled = false;
   $("#baixar").textContent = "Baixar de novo";
   document.querySelectorAll("#corpo input").forEach(c => c.disabled = false);
@@ -319,6 +335,37 @@ $("#baixar").onclick = async () => {
 
 /* Se a API recusar o download direto, ainda dá para abrir cada anexo
    numa aba: ali quem autentica é o cookie de sessão do Trello. */
+/* Painel de diagnóstico: agrupa as causas reais das falhas e mostra a
+   URL usada, para não ser preciso abrir o console do navegador. */
+function mostrarDiagnostico(){
+  const falhados = itens.filter(i => i.falhou);
+  if (!falhados.length) return;
+  const antigo = $("#diag-box"); if (antigo) antigo.remove();
+
+  const contagem = {};
+  falhados.forEach(i => { contagem[i.erro] = (contagem[i.erro] || 0) + 1; });
+  const causas = Object.entries(contagem)
+    .map(([causa, n]) => `<li><b>${escapar(causa)}</b> — ${n} anexo${n===1?"":"s"}</li>`).join("");
+
+  const cors = falhados.some(i => /CORS/.test(i.erro || ""));
+  const explica = cors
+    ? `O navegador barrou a leitura antes de o arquivo chegar. Isso <b>não</b> se resolve
+       com ajuste de chave ou de permissão — significa que os bytes não podem ser lidos
+       por JavaScript a partir deste endereço. O Plano B abaixo contorna, e eu tenho
+       outros caminhos se você quiser o zip de volta.`
+    : `A requisição chegou ao Trello e ele recusou. Códigos 401/403 apontam para a
+       credencial (chave, token ou permissão); 404 significa que a URL do anexo mudou.`;
+
+  const div = document.createElement("div");
+  div.className = "aviso"; div.id = "diag-box";
+  div.innerHTML = `<b>Diagnóstico</b><ul style="margin:8px 0 8px 18px;padding:0">${causas}</ul>
+    ${explica}
+    <div style="margin-top:10px;font-size:11.5px;color:var(--ink2);word-break:break-all">
+      Endereço usado:<br>${escapar(urlDownload(falhados[0]).replace(/\/download\/.*$/, "/download/…"))}
+    </div>`;
+  $("#corpo").prepend(div);
+}
+
 function mostrarPlanoB(){
   const falhados = itens.filter(i => i.falhou);          // só o que realmente falhou
   if (!falhados.length) return;
