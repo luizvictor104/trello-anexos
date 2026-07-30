@@ -12,4 +12,7 @@
 
 const TRELLO_APP_KEY = "COLE_SUA_CHAVE_AQUI";
 
-const APP_NOME = "Baixar Anexos";
+/* Nome do Power-Up. Aparece na lista de Power-Ups do board e, mais
+   importante, na tela em que o Trello pede sua autorização — então
+   precisa ser o mesmo nome que você cadastrou no admin. */
+const APP_NOME = "AtDownloader";

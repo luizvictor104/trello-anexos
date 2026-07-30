@@ -1,4 +1,4 @@
-# Baixar Anexos — Power-Up para Trello
+# AtDownloader — Power-Up para Trello
 
 Adiciona um botão **"Baixar anexos"** dentro do cartão. Ele lista tudo que está anexado, você escolhe o que quer, e sai **um .zip só**.
 
@@ -32,7 +32,7 @@ Trello só carrega Power-Up por `https://`. GitHub Pages resolve de graça:
 ### 2. Crie o Power-Up
 
 1. Vá em [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → **New**
-2. Nome: `Baixar Anexos`. Escolha o Workspace.
+2. Nome: `AtDownloader` — precisa ser **igual** ao `APP_NOME` em `js/config.js`. Escolha o Workspace.
 3. Em **Iframe connector URL**, cole a URL do passo 1 (a pasta, ou `.../index.html`)
 4. Na aba **Capabilities**, ligue **`card-buttons`**
 5. Na aba **API Key**, clique em **Generate a new API key** e copie
