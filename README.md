@@ -1,26 +1,22 @@
 # AtDownloader — Power-Up para Trello
 
-Baixa anexos do Trello em **um .zip só**. Tem duas portas de entrada:
+Baixa os anexos do Trello sem sair do board. Você marca o que quer e o navegador salva tudo na sua pasta de Downloads.
 
-**No cabeçalho do board** — botão `AtDownloader`. Lista todos os cartões que têm anexo, você marca os que quiser, e baixa tudo de uma vez. Cada cartão vira uma pasta dentro do zip.
+Duas portas de entrada:
 
-**Dentro de um cartão** — botão `Baixar anexos`, para quando você quer só aquele cartão. Atenção: na interface nova do Trello, os botões de Power-Up ficam **escondidos atrás do ícone de foguete 🚀**, na barra no rodapé do cartão. Foi por isso que o botão do board virou o caminho principal.
+**No cabeçalho do board** — botão `AtDownloader`. Lista todos os anexos do board agrupados por cartão. Dá para marcar arquivo por arquivo, ou o cartão inteiro de uma vez.
 
-- Nomes com acento saem certos no Windows, Mac e Linux (flag UTF-8 do ZIP)
-- Anexos de mesmo nome não se sobrescrevem: viram `arquivo (2).pdf`
-- Anexo que é só um link vira um `_links.txt` dentro do zip
-- Se algum falhar, os outros vão no zip mesmo assim, e aparece um Plano B
+**Dentro de um cartão** — botão `Baixar anexos`, para quando você quer só aquele cartão. Atenção: na interface nova do Trello os botões de Power-Up ficam **escondidos atrás do ícone de foguete 🚀**, na barra no rodapé do cartão. Foi por isso que o botão do board virou o caminho principal.
 
 ## Arquivos
 
 | Arquivo | Papel |
 |---|---|
-| `index.html` | Página conectora. É a URL que vai no admin do Trello. Não tem interface — só declara o botão. |
-| `cartoes.html` | A janela do botão do board: lista os cartões com anexo e baixa vários de uma vez. |
-| `baixar.html` | A janela do botão do cartão: lista os anexos daquele cartão. |
-| `js/config.js` | **O único arquivo que você edita.** Sua chave de API. |
-| `js/zip.js` | Escritor de ZIP sem dependência externa. |
-| `icone.svg` | Ícone do botão. |
+| `index.html` | Página conectora. É a URL que vai no admin do Trello. Não tem interface — só declara os botões. |
+| `cartoes.html` | A janela do botão do board. |
+| `baixar.html` | A janela do botão do cartão. |
+| `js/config.js` | Nome do Power-Up e a chave de API. |
+| `icone.svg` | Ícone dos botões. |
 
 ## Instalação
 
@@ -32,62 +28,58 @@ Trello só carrega Power-Up por `https://`. GitHub Pages resolve de graça:
 
 1. Crie um repositório e suba estes arquivos
 2. Settings → Pages → Source: `main` / raiz
-3. Anote a URL: `https://seuusuario.github.io/trello-anexos/`
+3. Anote a URL, por exemplo `https://luizvictor104.github.io/trello-anexos/`
 
 ### 2. Crie o Power-Up
 
-1. Vá em [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → **New**
+1. Vá em [trello.com/apps/admin](https://trello.com/apps/admin) → **New**
 2. Nome: `AtDownloader` — precisa ser **igual** ao `APP_NOME` em `js/config.js`. Escolha o Workspace.
-3. Em **Iframe connector URL**, cole a URL do passo 1 (a pasta, ou `.../index.html`)
-4. Na aba **Capabilities**, ligue **`board-buttons`** e **`card-buttons`**
+3. Em **Iframe connector URL**, cole a URL do passo 1
+4. Salve. **Só agora** a aba **Capabilities** aparece — sem a connector URL o Trello trata o app como integração de API, não como Power-Up.
+5. Em **Capabilities**, ligue **`board-buttons`** e **`card-buttons`**
 
-   A aba Capabilities só aparece **depois** que a Iframe connector URL está preenchida e salva — sem ela o Trello trata o app como integração de API, não como Power-Up.
-5. Na aba **API Key**, clique em **Generate a new API key** e copie
-6. **Ainda na aba API Key**, em **Allowed Origins**, adicione a origem de onde o Power-Up é servido:
+### 3. Use
 
-   ```
-   https://luizvictor104.github.io
-   ```
+No board: menu → Power-Ups → adicione o seu. O botão **AtDownloader** aparece no cabeçalho.
 
-   Só o domínio — sem caminho e sem barra final. **Esta etapa não é opcional:** com a lista de origens vazia, `authorize()` falha com *"Invalid return_url. The return URL should match the application's allowed origins"*. Curinga `*` foi descontinuado pelo Trello e é ignorado.
+O Power-Up **não pede autorização** e **não usa token**. Ele lê os anexos pelo contexto que o Trello já entrega, e quem baixa é o seu navegador, autenticado pela sua própria sessão do Trello.
 
-### 3. Cole a chave
+## Por que não sai um .zip
 
-Abra `js/config.js` e troque o texto de exemplo:
+A primeira versão montava um zip único, com uma pasta por cartão. Funcionava em teste e **falhou no uso real**. Vale registrar o porquê, porque a armadilha é sutil.
 
-```js
-const TRELLO_APP_KEY = "sua_chave_aqui";
-```
+Para zipar, o JavaScript precisa **ler os bytes** de cada anexo. Testei o preflight de CORS contra `api.trello.com` e ele liberava tudo: `access-control-allow-origin: *` e `Authorization` entre os cabeçalhos permitidos. Conclui que dava para buscar os arquivos de dentro do Power-Up.
 
-Suba de novo. A chave de API do Trello identifica o Power-Up, não você — ela é pública por design e pode ficar no repositório. Quem dá acesso aos seus dados é o **token**, que nasce quando você clica em "Autorizar" e fica só no seu navegador.
+Era o teste errado. **O preflight autoriza a entrada, não o caminho inteiro.** Na prática o `api.trello.com` aceita o pedido e **redireciona** o arquivo para o servidor de armazenamento, que não autoriza leitura por JavaScript. O navegador segue o redirecionamento e barra na chegada — `TypeError: Failed to fetch`, sem status.
 
-### 4. Use
+Nada disso se resolve com chave, token ou permissão. As saídas seriam:
 
-No board: menu → Power-Ups → adicione o seu. Abra um cartão com anexos e clique em **Baixar anexos**. Na primeira vez ele pede autorização de **leitura**.
+- **um intermediário** (tipo Cloudflare Worker) que busca o arquivo e devolve com a permissão que falta — traria o zip de volta, ao custo de mais uma peça na infraestrutura e do token passando por ela;
+- **deixar o navegador baixar**, que é o que este Power-Up faz hoje.
 
-## O que eu testei e o que não deu para testar
+O escritor de ZIP (`js/zip.js`) chegou a ser escrito e validado — gerava arquivos corretos, com nomes acentuados em UTF-8, subpastas e deduplicação. Foi removido junto com o resto do caminho do zip; está no histórico do git se um dia o intermediário existir.
 
-**Testado de verdade:**
+## Como o download funciona
 
-- **O escritor de ZIP.** Gerei arquivos com acento, nomes duplicados, binário de 200 KB e arquivo vazio; conferi com `unzip -t` (CRC), com o `zipfile` do Python (nomes UTF-8 decodificando certo) e com o `ditto` do macOS. Binário confere byte a byte por sha256.
-- **CORS da API do Trello.** O preflight em `api.trello.com/1/cards/.../attachments/.../download/...` responde `access-control-allow-origin: *` e `access-control-allow-headers: Authorization`. É isso que torna o zip possível de dentro do iframe — sem isso, só dava para abrir uma aba por anexo.
-- **A tela inteira**, com o Trello simulado: listagem, tamanhos, marcar/desmarcar, progresso, um anexo falhando de propósito, o zip resultante (conferi as 5 entradas, o `(2)` do duplicado e o `_links.txt`) e o Plano B.
+Arquivos vão num **iframe escondido**: o navegador recebe o arquivo e salva direto, sem abrir aba e sem esbarrar no bloqueador de pop-up. Anexos que são apenas **links** abrem em aba — num iframe eles só carregariam a página invisivelmente e nada chegaria a você.
 
-**Não deu para testar:** a chamada autenticada real. Ela exige conta no Trello, chave de API e a URL hospedada — as três coisas suas. Um detalhe em aberto: a resposta **401** que a API devolve não traz o cabeçalho CORS, embora o preflight traga. Se por acaso a resposta de sucesso também não trouxer, o `fetch` vai falhar e o **Plano B** entra automaticamente (abre cada anexo numa aba, autenticando pelo cookie da sua sessão). Você vai descobrir no primeiro clique: ou vem o zip, ou vem o Plano B.
+Na primeira vez o navegador pergunta se pode *baixar vários arquivos*. É esperado; basta permitir uma vez.
+
+Se por algum motivo os downloads não começarem, o rodapé tem **"Prefere abrir em abas?"** — sempre visível, como alternativa, não como mensagem de erro.
 
 ## Problemas conhecidos na configuração
 
 | Sintoma | Causa | Correção |
 |---|---|---|
-| `Invalid return_url` ao autorizar | Allowed Origins vazio na aba API Key | Adicione `https://luizvictor104.github.io` |
-| Aba **Capabilities** não existe | Iframe connector URL ainda não preenchida — sem ela o Trello trata o app como integração de API, não Power-Up | Preencha e salve a connector URL |
-| Botão não aparece no cartão | Não é bug: a interface nova do Trello esconde os botões de Power-Up atrás do ícone de **foguete 🚀** na barra do rodapé do cartão | Clique no foguete |
-| Botão não aparece no cabeçalho do board | Capability `board-buttons` desligada, ou conector em cache | Ligue em Capabilities e recarregue com Cmd+Shift+R |
+| Aba **Capabilities** não existe | Iframe connector URL ainda não preenchida | Preencha e salve a connector URL |
+| Botão não aparece no cartão | A interface nova do Trello esconde os botões atrás do ícone de **foguete 🚀** no rodapé do cartão | Clique no foguete |
+| Botão não aparece no cabeçalho | Capability `board-buttons` desligada, ou conector em cache | Ligue em Capabilities e recarregue com Cmd+Shift+R |
 | Mudança publicada não aparece | Cache do navegador nos arquivos do GitHub Pages | Cmd+Shift+R |
+
+`Invalid return_url` era um problema da versão com token, que exigia preencher **Allowed Origins** na aba API Key. Sem token, ele não acontece mais.
 
 ## Limites
 
-- Zip montado na memória do navegador. Acima de 500 MB o app avisa; acima de 4 GB o formato exigiria Zip64, que não implementei.
-- Sem compressão (método "store"). Anexo de Trello é quase sempre jpg, png, pdf ou mp4 — já comprimidos. Recomprimir gastaria CPU para ganhar quase nada.
+- Um arquivo por vez, na sua pasta de Downloads. Sem pastas por cartão — isso exigiria o zip.
 - O botão aparece para quem pode editar o cartão (`condition: 'edit'`).
-- Power-Up privado, só do seu Workspace. Publicar no diretório do Trello exige e-mail de suporte e política de privacidade.
+- Power-Up privado, preso ao Workspace onde foi criado. Para usar em outro Workspace, crie uma segunda listagem apontando para a mesma URL.

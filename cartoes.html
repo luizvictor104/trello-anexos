@@ -8,7 +8,7 @@
 :root{
   color-scheme: light dark;
   --bg:#fff; --bg2:#f4f5f7; --ink:#172b4d; --ink2:#5e6c84; --linha:#dfe1e6;
-  --azul:#0079bf; --azul2:#005a8c; --verde:#61bd4f; --vermelho:#eb5a46; --amarelo:#f2d600;
+  --azul:#0079bf; --azul2:#005a8c; --verde:#61bd4f; --amarelo:#f2d600;
 }
 @media (prefers-color-scheme: dark){
   :root{ --bg:#1d2125; --bg2:#22272b; --ink:#b6c2cf; --ink2:#8c9bab; --linha:#2c333a;
@@ -16,39 +16,40 @@
 }
 *{box-sizing:border-box}
 [hidden]{display:none !important}
-body{
-  margin:0; background:var(--bg); color:var(--ink);
-  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  display:flex; flex-direction:column; height:100vh;
-}
+body{margin:0; background:var(--bg); color:var(--ink); display:flex; flex-direction:column; height:100vh;
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 .topo{padding:14px 16px 10px; border-bottom:1px solid var(--linha); flex:none}
 .topo h1{font-size:15px; margin:0 0 3px; font-weight:600}
 .topo p{margin:0; font-size:12.5px; color:var(--ink2)}
 .corpo{flex:1; overflow-y:auto; padding:6px 16px}
-.rodape{
-  flex:none; padding:12px 16px; border-top:1px solid var(--linha); background:var(--bg2);
-  display:flex; gap:10px; align-items:center;
-}
+.rodape{flex:none; padding:12px 16px; border-top:1px solid var(--linha); background:var(--bg2)}
+.rodape .linha1{display:flex; gap:10px; align-items:center}
 button{font:inherit; font-weight:500; border:0; border-radius:3px; cursor:pointer;
   padding:9px 16px; background:var(--azul); color:#fff}
 button:hover:not(:disabled){background:var(--azul2)}
 button:disabled{opacity:.5; cursor:default}
 
-.cartao{display:flex; align-items:flex-start; gap:11px; padding:11px 2px; border-bottom:1px solid var(--linha)}
-.cartao:last-child{border-bottom:0}
-.cartao input{width:16px; height:16px; accent-color:var(--azul); flex:none; cursor:pointer; margin-top:2px}
-.cartao .meio{flex:1; min-width:0}
-.cartao .nome{font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.cartao .det{font-size:12px; color:var(--ink2); margin-top:1px}
-.cartao .estado{flex:none; font-size:12px; color:var(--ink2); min-width:80px; text-align:right}
-.ok{color:var(--verde)} .erro{color:var(--vermelho)}
+.grupo{margin:14px 0 0}
+.grupo .cab{display:flex; align-items:center; gap:9px; padding:6px 2px 7px; border-bottom:1px solid var(--linha)}
+.grupo .cab input{width:15px; height:15px; accent-color:var(--azul); flex:none; cursor:pointer}
+.grupo .cab b{font-size:13px; font-weight:600; flex:1; min-width:0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.grupo .cab span{font-size:11.5px; color:var(--ink2); flex:none}
+.item{display:flex; align-items:center; gap:10px; padding:8px 2px 8px 24px; border-bottom:1px solid var(--linha)}
+.item:last-child{border-bottom:0}
+.item input{width:16px; height:16px; accent-color:var(--azul); flex:none; cursor:pointer}
+.item .nome{flex:1; min-width:0}
+.item .nome b{display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.item .nome span{font-size:12px; color:var(--ink2)}
+.item .estado{flex:none; font-size:12px; color:var(--verde); min-width:20px; text-align:right}
 .aviso{background:var(--bg2); border:1px solid var(--linha); border-left:3px solid var(--amarelo);
   border-radius:3px; padding:11px 13px; margin:12px 0; font-size:13px; line-height:1.5}
 .centro{text-align:center; padding:34px 20px; color:var(--ink2)}
 .centro b{display:block; color:var(--ink); font-size:15px; margin-bottom:6px}
 .marcar{font-size:12.5px; color:var(--ink2); padding:8px 2px; display:flex; gap:12px}
-.marcar button{background:none; color:var(--azul); padding:0; font-size:12.5px; font-weight:400}
-.marcar button:hover{background:none; text-decoration:underline}
+.marcar button, .discreto{background:none; color:var(--azul); padding:0; font-size:12.5px; font-weight:400;
+  border:0; cursor:pointer; font-family:inherit}
+.marcar button:hover, .discreto:hover{background:none; text-decoration:underline}
 a{color:var(--azul)}
 </style>
 </head>
@@ -60,25 +61,32 @@ a{color:var(--azul)}
 </div>
 
 <div class="corpo" id="corpo">
-  <div class="centro">Procurando cartões com anexos…</div>
+  <div class="centro">Procurando anexos no board…</div>
 </div>
 
 <div class="rodape" id="rodape" hidden>
-  <button id="baixar">Baixar .zip</button>
-  <span id="progresso" style="font-size:12.5px;color:var(--ink2);flex:1"></span>
+  <div class="linha1">
+    <button id="baixar">Baixar</button>
+    <span id="progresso" style="font-size:12.5px;color:var(--ink2);flex:1"></span>
+  </div>
+  <div style="margin-top:8px">
+    <button class="discreto" id="porAbas">Prefere abrir em abas?</button>
+  </div>
 </div>
 
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 <script src="js/config.js"></script>
-<script src="js/zip.js"></script>
 <script>
 "use strict";
+
+/* Sem token e sem API REST: t.cards() entrega os cartões do board com
+   os anexos, e quem baixa é o navegador, pela sua sessão do Trello. */
 
 const t = window.TrelloPowerUp.iframe({ appKey: TRELLO_APP_KEY, appName: APP_NOME });
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 
-let board = null, cartoes = [], token = null;
+let board = null, grupos = [], itens = [];
 
 const kb = n => {
   if (n == null || !isFinite(n)) return "";
@@ -92,252 +100,153 @@ function ehArquivo(a){
   if (typeof a.bytes === "number" && a.bytes > 0) return true;
   return /\/attachments\/[a-f0-9]{24}\/download\//i.test(a.url || "");
 }
-const cabecalhoAuth = () =>
-  ({ Authorization: `OAuth oauth_consumer_key="${TRELLO_APP_KEY}", oauth_token="${token}"` });
-
-/* TypeError sem status = o navegador barrou (CORS). HTTP com status = o
-   Trello respondeu e recusou. As duas coisas pedem soluções opostas. */
-function descreverErro(e){
-  if (e && e.status) return `HTTP ${e.status}`;
-  if (e instanceof TypeError) return "bloqueado pelo navegador (CORS)";
-  return (e && e.message) || "desconhecido";
-}
-
-const urlDownload = (idCartao, a) =>
-  `https://api.trello.com/1/cards/${idCartao}/attachments/${a.id}/download/${encodeURIComponent(a.fileName || a.name || "arquivo")}`;
-
 const comLimite = (p, ms) => Promise.race([
   p, new Promise((_, rej) => setTimeout(() => rej(new Error("SEM_CONTEXTO")), ms))
 ]);
-
 function telaCentro(html){ $("#corpo").innerHTML = `<div class="centro">${html}</div>`; }
 
-/* ---------- carregar ---------- */
-async function carregar(){
-  if (!TRELLO_APP_KEY || TRELLO_APP_KEY === "COLE_SUA_CHAVE_AQUI") {
-    $("#titulo").textContent = "Falta configurar a chave";
-    return telaCentro(`<b>O arquivo js/config.js ainda está com o texto de exemplo.</b>
-      Pegue a chave em <a href="https://trello.com/apps/admin" target="_blank">trello.com/apps/admin</a>.`);
-  }
-
-  try {
-    const api = t.getRestApi();
-    if (!(await comLimite(api.isAuthorized(), 8000))) {
-      $("#titulo").textContent = "Autorização necessária";
-      telaCentro(`<b>Preciso da sua permissão para ler os anexos.</b>
-        A permissão é de <b>leitura</b> e fica guardada só neste navegador.
-        <div style="margin-top:16px"><button id="autorizar">Autorizar</button></div>`);
-      $("#autorizar").onclick = async () => {
-        try { await t.getRestApi().authorize({ scope: "read", expiration: "never" }); carregar(); }
-        catch (e) { telaCentro(`<b>Não consegui autorizar.</b> ${escapar(e && e.message || "")}`); }
-      };
-      return;
-    }
-    token = await api.getToken();
-  } catch (e) {
-    if (e && e.message === "SEM_CONTEXTO") {
-      $("#titulo").textContent = "Abra pelo Trello";
-      return telaCentro(`<b>Esta página só funciona dentro de um board.</b>
-        Ela não guarda dado nenhum: quem entrega as informações é o Trello,
-        e só quando ela é aberta pelo botão <b>AtDownloader</b> no cabeçalho do board.`);
-    }
-    return telaCentro(`<b>Não consegui falar com a API do Trello.</b>
-      Confira se a chave em config.js é a mesma do Power-Up instalado.`);
-  }
-
-  board = await t.board("id", "name");
-
-  let brutos;
-  try {
-    const r = await fetch(
-      `https://api.trello.com/1/boards/${board.id}/cards?attachments=true&fields=name&filter=visible`,
-      { headers: cabecalhoAuth() }
-    );
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    brutos = await r.json();
-  } catch (e) {
-    return telaCentro(`<b>Não consegui listar os cartões.</b> ${escapar(e.message || "")}
-      <div style="margin-top:14px"><button onclick="location.reload()">Tentar de novo</button></div>`);
-  }
-
-  cartoes = brutos
-    .map(c => {
-      const anexos = (c.attachments || []).map(a => ({
-        id: a.id, nome: a.fileName || a.name || "arquivo", bytes: a.bytes,
-        url: a.url, data: a.date ? new Date(a.date) : new Date(), arquivo: ehArquivo(a)
-      }));
-      return { id: c.id, nome: c.name, anexos, marcado: true };
-    })
-    .filter(c => c.anexos.length);
-
-  if (!cartoes.length) {
-    $("#titulo").textContent = board.name || "Board";
-    return telaCentro("<b>Nenhum cartão deste board tem anexos.</b>Nada para baixar aqui.");
-  }
-  telaLista();
+function baixarEmbutido(urls){
+  urls.forEach((u, i) => setTimeout(() => {
+    const f = document.createElement("iframe");
+    f.style.display = "none"; f.src = u;
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 60000);
+  }, i * 400));
+}
+function baixarPorAbas(urls){
+  urls.forEach((u, i) => setTimeout(() => window.open(u, "_blank", "noopener"), i * 350));
 }
 
-function totalBytes(c){ return c.anexos.reduce((s,a) => s + (a.bytes||0), 0); }
+function disparar(modo){
+  const alvos = itens.filter(i => i.marcado);
+  if (!alvos.length) return;
+  const arquivos = alvos.filter(i => i.arquivo);
+  const links = alvos.filter(i => !i.arquivo);
+  (modo === "abas" ? baixarPorAbas : baixarEmbutido)(arquivos.map(i => i.url));
+  // Link não é arquivo: num iframe escondido ele só carregaria a página
+  // e nada chegaria ao usuário. Link sempre abre em aba.
+  if (links.length) baixarPorAbas(links.map(i => i.url));
+  alvos.forEach(i => { const el = $("#e" + i.idx); if (el) el.textContent = "✓"; });
+  $("#progresso").textContent =
+    `${alvos.length} anexo${alvos.length===1?"":"s"} enviado${alvos.length===1?"":"s"} para o navegador`;
+}
 
+/* ---------- tela ---------- */
 function telaLista(){
-  const arquivos = cartoes.reduce((s,c) => s + c.anexos.filter(a=>a.arquivo).length, 0);
-  const bytes = cartoes.reduce((s,c) => s + totalBytes(c), 0);
+  const arquivos = itens.filter(i => i.arquivo);
+  const total = arquivos.reduce((s,i) => s + (i.bytes||0), 0);
 
   $("#titulo").textContent = board.name || "Board";
-  $("#sub").textContent = `${cartoes.length} cartão${cartoes.length===1?"":"es"} com anexo · ${arquivos} arquivo${arquivos===1?"":"s"} · ${kb(bytes)}`;
+  $("#sub").textContent = `${grupos.length} cartão${grupos.length===1?"":"es"} com anexo · `
+    + `${arquivos.length} arquivo${arquivos.length===1?"":"s"}` + (total ? ` · ${kb(total)}` : "");
 
-  let html = `<div class="marcar">
+  let html = `<div class="aviso">Os arquivos são baixados pelo próprio navegador, um a um,
+    direto para a sua pasta de Downloads. Na primeira vez o navegador pergunta se pode
+    <b>baixar vários arquivos</b> — é normal, é só permitir.</div>`;
+
+  html += `<div class="marcar">
       <button onclick="marcarTodos(true)">Marcar todos</button>
       <button onclick="marcarTodos(false)">Desmarcar todos</button>
     </div>`;
 
-  html += cartoes.map((c, i) => {
-    const arq = c.anexos.filter(a=>a.arquivo).length;
-    const lnk = c.anexos.length - arq;
-    return `<label class="cartao">
-      <input type="checkbox" data-i="${i}" ${c.marcado?"checked":""}>
-      <span class="meio">
-        <span class="nome">${escapar(c.nome)}</span>
-        <span class="det">${arq} arquivo${arq===1?"":"s"}${lnk?` · ${lnk} link${lnk===1?"":"s"}`:""} · ${kb(totalBytes(c))}</span>
-      </span>
-      <span class="estado" id="e${i}"></span>
-    </label>`;
-  }).join("");
-
-  if (bytes > 500*1024*1024) {
-    html += `<div class="aviso"><b>São mais de 500 MB no total.</b> O zip é montado na
-      memória do navegador. Desmarque alguns cartões e baixe em levas.</div>`;
-  }
-  html += `<div class="aviso">Cada cartão vira uma <b>pasta dentro do zip</b>, com o nome do cartão.</div>`;
+  html += grupos.map((g, gi) => `
+    <div class="grupo">
+      <label class="cab">
+        <input type="checkbox" data-g="${gi}" checked>
+        <b>${escapar(g.nome)}</b>
+        <span>${g.itens.length} anexo${g.itens.length===1?"":"s"}</span>
+      </label>
+      ${g.itens.map(i => `
+        <label class="item">
+          <input type="checkbox" data-i="${i.idx}" ${i.marcado?"checked":""}>
+          <span class="nome">
+            <b>${escapar(i.nome)}</b>
+            <span>${i.arquivo ? kb(i.bytes) : "link — abre numa aba"}</span>
+          </span>
+          <span class="estado" id="e${i.idx}"></span>
+        </label>`).join("")}
+    </div>`).join("");
 
   $("#corpo").innerHTML = html;
   $("#rodape").hidden = false;
+
   $("#corpo").addEventListener("change", e => {
     const cb = e.target.closest("input[type=checkbox]");
-    if (cb) { cartoes[+cb.dataset.i].marcado = cb.checked; atualizarBotao(); }
+    if (!cb) return;
+    if (cb.dataset.g !== undefined) {
+      // marcar o cartão inteiro marca todos os anexos dele
+      const g = grupos[+cb.dataset.g];
+      g.itens.forEach(i => {
+        i.marcado = cb.checked;
+        const el = $(`#corpo input[data-i="${i.idx}"]`);
+        if (el) el.checked = cb.checked;
+      });
+    } else {
+      itens[+cb.dataset.i].marcado = cb.checked;
+      sincronizarCabecalhos();
+    }
+    atualizarBotao();
   });
   atualizarBotao();
 }
 
+function sincronizarCabecalhos(){
+  grupos.forEach((g, gi) => {
+    const cb = $(`#corpo input[data-g="${gi}"]`);
+    if (!cb) return;
+    const marcados = g.itens.filter(i => i.marcado).length;
+    cb.checked = marcados === g.itens.length;
+    cb.indeterminate = marcados > 0 && marcados < g.itens.length;
+  });
+}
+
 window.marcarTodos = v => {
-  cartoes.forEach(c => c.marcado = v);
-  $$("#corpo input[type=checkbox]").forEach(c => c.checked = v);
+  itens.forEach(i => i.marcado = v);
+  $$("#corpo input[type=checkbox]").forEach(c => { c.checked = v; c.indeterminate = false; });
   atualizarBotao();
 };
 
 function atualizarBotao(){
-  const n = cartoes.filter(c => c.marcado).length;
+  const n = itens.filter(i => i.marcado).length;
   $("#baixar").disabled = n === 0;
-  $("#baixar").textContent = n === 0 ? "Baixar .zip" : `Baixar ${n} cartão${n===1?"":"es"} em .zip`;
+  $("#baixar").textContent = n === 0 ? "Baixar" : `Baixar ${n} anexo${n===1?"":"s"}`;
+  $("#porAbas").hidden = n === 0;
 }
 
-/* ---------- baixar ---------- */
-$("#baixar").onclick = async () => {
-  const alvos = cartoes.filter(c => c.marcado);
-  $("#baixar").disabled = true;
-  $$("#corpo input").forEach(c => c.disabled = true);
+$("#baixar").onclick = () => disparar("embutido");
+$("#porAbas").onclick = () => disparar("abas");
 
-  // "Baixar de novo" recomeça limpo
-  cartoes.forEach((c, i) => {
-    c.falhou = false; c.anexos.forEach(a => { a.falhou = false; a.erro = null; });
-    const e = $("#e" + i); if (e) { e.textContent = ""; e.className = "estado"; }
-  });
-  ["#planoB-box","#diag-box"].forEach(s => { const el = $(s); if (el) el.remove(); });
-
-  const prontos = [];
-  let falhas = 0, baixados = 0;
-  const totalArquivos = alvos.reduce((s,c) => s + c.anexos.filter(a=>a.arquivo).length, 0);
-
-  for (const c of alvos) {
-    const i = cartoes.indexOf(c);
-    const est = $("#e" + i);
-    const links = [];
-    let okCartao = 0;
-
-    for (const a of c.anexos) {
-      if (!a.arquivo) { links.push(`${a.nome}\n${a.url}\n`); continue; }
-      if (est) est.textContent = `${okCartao}/${c.anexos.filter(x=>x.arquivo).length}`;
-      try {
-        const r = await fetch(urlDownload(c.id, a), { headers: cabecalhoAuth() });
-        if (!r.ok) { const err = new Error("HTTP " + r.status); err.status = r.status; throw err; }
-        prontos.push({ nome: a.nome, dados: new Uint8Array(await r.arrayBuffer()), data: a.data, pasta: c.nome });
-        okCartao++;
-      } catch (e) {
-        falhas++; c.falhou = true; a.falhou = true;   // marca o anexo, não só o cartão
-        a.erro = descreverErro(e);
-        console.error("anexo", c.nome, a.nome, e);
-      }
-      baixados++;
-      $("#progresso").textContent = `${baixados} de ${totalArquivos} arquivos`;
-    }
-
-    if (links.length) {
-      prontos.push({ nome: "_links.txt", dados: new TextEncoder().encode(links.join("\n")), data: new Date(), pasta: c.nome });
-    }
-    if (est) {
-      est.textContent = c.falhou ? "parcial" : "✓";
-      est.className = "estado " + (c.falhou ? "erro" : "ok");
-    }
+/* ---------- carregar ---------- */
+async function carregar(){
+  let cards;
+  try {
+    board = await comLimite(t.board("id", "name"), 8000);
+    cards = await comLimite(t.cards("id", "name", "attachments"), 12000);
+  } catch (e) {
+    $("#titulo").textContent = "Abra pelo Trello";
+    return telaCentro(`<b>Esta página só funciona dentro de um board.</b>
+      Ela não guarda dado nenhum por conta própria: quem entrega as informações é o
+      Trello, e só quando ela é aberta pelo botão <b>AtDownloader</b> no board.`);
   }
 
-  if (!prontos.length) {
-    $("#progresso").innerHTML = `<span class="erro">Nenhum anexo baixou.</span>`;
-    mostrarPlanoB(alvos); mostrarDiagnostico();
-    $("#baixar").disabled = false;
-    return;
+  let idx = 0;
+  grupos = (cards || []).map(c => {
+    const lista = (c.attachments || []).map(a => ({
+      idx: idx++,
+      nome: a.fileName || a.name || "arquivo",
+      bytes: a.bytes, url: a.url,
+      arquivo: ehArquivo(a), marcado: true
+    }));
+    return { nome: c.name, itens: lista };
+  }).filter(g => g.itens.length);
+
+  itens = grupos.flatMap(g => g.itens);
+
+  if (!itens.length) {
+    $("#titulo").textContent = board.name || "Board";
+    return telaCentro("<b>Nenhum cartão deste board tem anexos.</b>Nada para baixar aqui.");
   }
-
-  const zip = ZipSimples.criarZip(prontos);
-  const blob = new Blob([zip], { type: "application/zip" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = ZipSimples.nomeSeguro(board.name || "board") + " — anexos.zip";
-  document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
-
-  $("#progresso").innerHTML = falhas
-    ? `<span class="erro">${falhas} falhou(ram)</span> · ${prontos.length} no zip`
-    : `<span class="ok">Pronto — ${prontos.length} arquivos no zip</span>`;
-  if (falhas) { mostrarPlanoB(alvos.filter(c => c.falhou)); mostrarDiagnostico(); }
-  $("#baixar").disabled = false;
-  $("#baixar").textContent = "Baixar de novo";
-  $$("#corpo input").forEach(c => c.disabled = false);
-};
-
-function mostrarDiagnostico(){
-  const ruins = cartoes.flatMap(c => c.anexos.filter(a => a.falhou));
-  if (!ruins.length) return;
-  const antigo = $("#diag-box"); if (antigo) antigo.remove();
-  const contagem = {};
-  ruins.forEach(a => { contagem[a.erro] = (contagem[a.erro] || 0) + 1; });
-  const causas = Object.entries(contagem)
-    .map(([causa, n]) => `<li><b>${escapar(causa)}</b> — ${n} anexo${n===1?"":"s"}</li>`).join("");
-  const cors = ruins.some(a => /CORS/.test(a.erro || ""));
-  const div = document.createElement("div");
-  div.className = "aviso"; div.id = "diag-box";
-  div.innerHTML = `<b>Diagnóstico</b><ul style="margin:8px 0 8px 18px;padding:0">${causas}</ul>
-    ${cors
-      ? `O navegador barrou a leitura antes de o arquivo chegar. Não se resolve com ajuste
-         de chave ou permissão. O Plano B contorna abrindo pelo navegador.`
-      : `A requisição chegou ao Trello e ele recusou — 401/403 é credencial, 404 é URL.`}`;
-  $("#corpo").prepend(div);
-}
-
-function mostrarPlanoB(lista){
-  // só o que realmente falhou — não os anexos que baixaram bem
-  // num cartão que teve alguma falha
-  const urls = lista.flatMap(c => c.anexos.filter(a => a.falhou).map(a => a.url));
-  if (!urls.length) return;
-  const antigo = $("#planoB-box"); if (antigo) antigo.remove();
-  const div = document.createElement("div");
-  div.className = "aviso"; div.id = "planoB-box";
-  div.innerHTML = `<b>Plano B:</b> abrir os anexos em abas e salvar pelo navegador —
-    ali quem autentica é a sua sessão do Trello. Pode ser preciso liberar pop-ups.
-    <div style="margin-top:10px"><button id="planoB">Abrir ${urls.length} aba${urls.length===1?"":"s"}</button></div>`;
-  $("#corpo").prepend(div);
-  $("#planoB").onclick = () => urls.forEach((u, n) =>
-    setTimeout(() => window.open(u, "_blank", "noopener"), n * 350));
+  telaLista();
 }
 
 carregar().catch(e => {

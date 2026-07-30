@@ -8,59 +8,42 @@
 :root{
   color-scheme: light dark;
   --bg:#fff; --bg2:#f4f5f7; --ink:#172b4d; --ink2:#5e6c84; --linha:#dfe1e6;
-  --azul:#0079bf; --azul2:#005a8c; --verde:#61bd4f; --vermelho:#eb5a46; --amarelo:#f2d600;
+  --azul:#0079bf; --azul2:#005a8c; --verde:#61bd4f; --amarelo:#f2d600;
 }
 @media (prefers-color-scheme: dark){
   :root{ --bg:#1d2125; --bg2:#22272b; --ink:#b6c2cf; --ink2:#8c9bab; --linha:#2c333a;
          --azul:#579dff; --azul2:#85b8ff; }
 }
 *{box-sizing:border-box}
-/* display:flex no .rodape venceria o [hidden], que só vale display:none */
 [hidden]{display:none !important}
-body{
-  margin:0; background:var(--bg); color:var(--ink);
-  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  display:flex; flex-direction:column; height:100vh;
-}
+body{margin:0; background:var(--bg); color:var(--ink); display:flex; flex-direction:column; height:100vh;
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 .topo{padding:14px 16px 10px; border-bottom:1px solid var(--linha); flex:none}
 .topo h1{font-size:15px; margin:0 0 3px; font-weight:600}
 .topo p{margin:0; font-size:12.5px; color:var(--ink2)}
 .corpo{flex:1; overflow-y:auto; padding:6px 16px}
-.rodape{
-  flex:none; padding:12px 16px; border-top:1px solid var(--linha); background:var(--bg2);
-  display:flex; gap:10px; align-items:center;
-}
-button{
-  font:inherit; font-weight:500; border:0; border-radius:3px; cursor:pointer;
-  padding:9px 16px; background:var(--azul); color:#fff;
-}
+.rodape{flex:none; padding:12px 16px; border-top:1px solid var(--linha); background:var(--bg2)}
+.rodape .linha1{display:flex; gap:10px; align-items:center}
+button{font:inherit; font-weight:500; border:0; border-radius:3px; cursor:pointer;
+  padding:9px 16px; background:var(--azul); color:#fff}
 button:hover:not(:disabled){background:var(--azul2)}
 button:disabled{opacity:.5; cursor:default}
-button.fraco{background:transparent; color:var(--ink2); padding:9px 10px}
-button.fraco:hover:not(:disabled){background:var(--linha); color:var(--ink)}
-
 .item{display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--linha)}
 .item:last-child{border-bottom:0}
 .item input{width:16px; height:16px; accent-color:var(--azul); flex:none; cursor:pointer}
 .item .nome{flex:1; min-width:0}
 .item .nome b{display:block; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .item .nome span{font-size:12px; color:var(--ink2)}
-.item .estado{flex:none; font-size:12px; color:var(--ink2); min-width:66px; text-align:right}
-.ok{color:var(--verde)} .erro{color:var(--vermelho)}
-
-.aviso{
-  background:var(--bg2); border:1px solid var(--linha); border-left:3px solid var(--amarelo);
-  border-radius:3px; padding:11px 13px; margin:12px 0; font-size:13px; line-height:1.5;
-}
-.aviso b{font-weight:600}
+.item .estado{flex:none; font-size:12px; color:var(--verde); min-width:20px; text-align:right}
+.aviso{background:var(--bg2); border:1px solid var(--linha); border-left:3px solid var(--amarelo);
+  border-radius:3px; padding:11px 13px; margin:12px 0; font-size:13px; line-height:1.5}
 .centro{text-align:center; padding:34px 20px; color:var(--ink2)}
 .centro b{display:block; color:var(--ink); font-size:15px; margin-bottom:6px}
-.barra{height:4px; background:var(--linha); border-radius:2px; overflow:hidden; margin-top:9px}
-.barra i{display:block; height:100%; background:var(--azul); width:0; transition:width .2s}
-a{color:var(--azul)}
 .marcar{font-size:12.5px; color:var(--ink2); padding:8px 2px; display:flex; gap:12px}
-.marcar button{background:none; color:var(--azul); padding:0; font-size:12.5px; font-weight:400}
-.marcar button:hover{background:none; text-decoration:underline}
+.marcar button, .discreto{background:none; color:var(--azul); padding:0; font-size:12.5px; font-weight:400;
+  border:0; cursor:pointer; font-family:inherit}
+.marcar button:hover, .discreto:hover{background:none; text-decoration:underline}
+a{color:var(--azul)}
 </style>
 </head>
 <body>
@@ -75,20 +58,33 @@ a{color:var(--azul)}
 </div>
 
 <div class="rodape" id="rodape" hidden>
-  <button id="baixar">Baixar .zip</button>
-  <span id="progresso" style="font-size:12.5px;color:var(--ink2);flex:1"></span>
+  <div class="linha1">
+    <button id="baixar">Baixar</button>
+    <span id="progresso" style="font-size:12.5px;color:var(--ink2);flex:1"></span>
+  </div>
+  <div style="margin-top:8px">
+    <button class="discreto" id="porAbas">Prefere abrir em abas?</button>
+  </div>
 </div>
 
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 <script src="js/config.js"></script>
-<script src="js/zip.js"></script>
 <script>
 "use strict";
 
-const t = window.TrelloPowerUp.iframe({ appKey: TRELLO_APP_KEY, appName: APP_NOME });
+/* Sem token, sem API REST, sem autorização.
+   Os anexos vêm do contexto que o Trello entrega ao Power-Up, e quem
+   baixa é o próprio navegador, autenticado pelo seu cookie de sessão.
+   Tentamos ler os bytes por fetch para montar um zip, mas o Trello
+   redireciona o arquivo para um servidor de armazenamento que não
+   autoriza leitura por JavaScript — o navegador barra na chegada.
+   Baixar direto pelo navegador contorna isso e não precisa de token. */
 
+const t = window.TrelloPowerUp.iframe({ appKey: TRELLO_APP_KEY, appName: APP_NOME });
 const $ = s => document.querySelector(s);
-let cartao = null, itens = [], token = null;
+const $$ = s => [...document.querySelectorAll(s)];
+
+let cartao = null, itens = [];
 
 const kb = n => {
   if (n == null || !isFinite(n)) return "";
@@ -96,74 +92,70 @@ const kb = n => {
   if (n < 1048576) return (n/1024).toFixed(0) + " KB";
   return (n/1048576).toFixed(1).replace(".", ",") + " MB";
 };
+const escapar = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-/* Anexo do Trello pode ser arquivo enviado OU só um link colado.
-   Link não tem bytes para baixar — vai para um _links.txt no zip. */
 function ehArquivo(a){
   if (typeof a.bytes === "number" && a.bytes > 0) return true;
   return /\/attachments\/[a-f0-9]{24}\/download\//i.test(a.url || "");
 }
 
-function urlDownload(a){
-  const nome = encodeURIComponent(a.fileName || a.name || "arquivo");
-  return `https://api.trello.com/1/cards/${cartao.id}/attachments/${a.id}/download/${nome}`;
-}
+const comLimite = (p, ms) => Promise.race([
+  p, new Promise((_, rej) => setTimeout(() => rej(new Error("SEM_CONTEXTO")), ms))
+]);
 
-function cabecalhoAuth(){
-  return { Authorization: `OAuth oauth_consumer_key="${TRELLO_APP_KEY}", oauth_token="${token}"` };
-}
-
-/* Distinguir os dois modos de falha é o que decide a solução:
-   - TypeError sem status  -> o navegador barrou (CORS/rede). Nenhum
-     ajuste de header resolve; é preciso outro caminho para os bytes.
-   - HTTP com status       -> a requisição chegou ao Trello e ele recusou.
-     401/403 = credencial, 404 = URL errada. */
-function descreverErro(e){
-  if (e && e.status) return `HTTP ${e.status}`;
-  if (e instanceof TypeError) return "bloqueado pelo navegador (CORS)";
-  return (e && e.message) || "desconhecido";
-}
-
-/* ---------- telas ---------- */
 function telaCentro(html){ $("#corpo").innerHTML = `<div class="centro">${html}</div>`; }
 
-function telaChaveFaltando(){
-  $("#titulo").textContent = "Falta configurar a chave";
-  telaCentro(`<b>O arquivo js/config.js ainda está com o texto de exemplo.</b>
-    Pegue a chave em <a href="https://trello.com/power-ups/admin" target="_blank">trello.com/power-ups/admin</a>
-    → seu Power-Up → aba <b>API Key</b>, e cole em <code>TRELLO_APP_KEY</code>.`);
+/* ---------- baixar ----------
+   iframe escondido: o navegador recebe o arquivo com Content-Disposition
+   e salva direto, sem abrir aba e sem esbarrar no bloqueador de pop-up.
+   Abrir em abas fica como alternativa sempre visível — não como
+   "deu errado, tente assim". */
+function baixarEmbutido(urls){
+  urls.forEach((u, i) => setTimeout(() => {
+    const f = document.createElement("iframe");
+    f.style.display = "none";
+    f.src = u;
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 60000);
+  }, i * 400));
+}
+function baixarPorAbas(urls){
+  urls.forEach((u, i) => setTimeout(() => window.open(u, "_blank", "noopener"), i * 350));
 }
 
-async function telaAutorizar(){
-  $("#titulo").textContent = "Autorização necessária";
-  telaCentro(`<b>Preciso da sua permissão para ler os anexos.</b>
-    O Trello vai abrir uma janela pedindo confirmação. A permissão é de <b>leitura</b>
-    e fica guardada só neste navegador.
-    <div style="margin-top:16px"><button id="autorizar">Autorizar</button></div>`);
-  // authorize() precisa sair de um clique real, senão o navegador bloqueia o popup
-  $("#autorizar").onclick = async () => {
-    try {
-      await t.getRestApi().authorize({ scope: "read", expiration: "never" });
-      carregar();
-    } catch (e) {
-      telaCentro(`<b>Não consegui autorizar.</b>${e && e.message ? " (" + e.message + ")" : ""}
-        <div style="margin-top:14px"><button onclick="location.reload()">Tentar de novo</button></div>`);
-    }
-  };
+function disparar(modo){
+  const alvos = itens.filter(i => i.marcado);
+  if (!alvos.length) return;
+  const arquivos = alvos.filter(i => i.arquivo);
+  const links = alvos.filter(i => !i.arquivo);
+  (modo === "abas" ? baixarPorAbas : baixarEmbutido)(arquivos.map(i => i.url));
+  // Link não é arquivo: num iframe escondido ele só carregaria a página
+  // e nada chegaria ao usuário. Link sempre abre em aba.
+  if (links.length) baixarPorAbas(links.map(i => i.url));
+  alvos.forEach(i => {
+    const el = $("#e" + itens.indexOf(i));
+    if (el) el.textContent = "✓";
+  });
+  $("#progresso").textContent =
+    `${alvos.length} anexo${alvos.length===1?"":"s"} enviado${alvos.length===1?"":"s"} para o navegador`;
 }
 
+/* ---------- tela ---------- */
 function telaLista(){
   const arquivos = itens.filter(i => i.arquivo);
   const links = itens.filter(i => !i.arquivo);
   const total = arquivos.reduce((s,i) => s + (i.bytes||0), 0);
 
   $("#titulo").textContent = cartao.name || "Cartão";
-  $("#sub").textContent =
-    `${arquivos.length} arquivo${arquivos.length===1?"":"s"}` +
-    (total ? ` · ${kb(total)}` : "") +
-    (links.length ? ` · ${links.length} link${links.length===1?"":"s"}` : "");
+  $("#sub").textContent = `${arquivos.length} arquivo${arquivos.length===1?"":"s"}`
+    + (total ? ` · ${kb(total)}` : "")
+    + (links.length ? ` · ${links.length} link${links.length===1?"":"s"}` : "");
 
-  let html = `<div class="marcar">
+  let html = `<div class="aviso">Os arquivos são baixados pelo próprio navegador, um a um,
+    direto para a sua pasta de Downloads. Na primeira vez o navegador pergunta se pode
+    <b>baixar vários arquivos</b> — é normal, é só permitir.</div>`;
+
+  html += `<div class="marcar">
       <button onclick="marcarTodos(true)">Marcar todos</button>
       <button onclick="marcarTodos(false)">Desmarcar todos</button>
     </div>`;
@@ -173,19 +165,13 @@ function telaLista(){
       <input type="checkbox" data-i="${idx}" ${i.marcado ? "checked" : ""}>
       <span class="nome">
         <b>${escapar(i.nome)}</b>
-        <span>${i.arquivo ? kb(i.bytes) : "link — vai para _links.txt"}</span>
+        <span>${i.arquivo ? kb(i.bytes) : "link — abre numa aba"}</span>
       </span>
       <span class="estado" id="e${idx}"></span>
     </label>`).join("");
 
-  if (total > 500*1024*1024) {
-    html += `<div class="aviso"><b>São mais de 500 MB.</b> O zip é montado na memória do
-      navegador — com esse tamanho pode travar. Baixe em duas ou três levas.</div>`;
-  }
-
   $("#corpo").innerHTML = html;
   $("#rodape").hidden = false;
-
   $("#corpo").addEventListener("change", e => {
     const cb = e.target.closest("input[type=checkbox]");
     if (cb) { itens[+cb.dataset.i].marcado = cb.checked; atualizarBotao(); }
@@ -195,196 +181,51 @@ function telaLista(){
 
 window.marcarTodos = v => {
   itens.forEach(i => i.marcado = v);
-  document.querySelectorAll("#corpo input[type=checkbox]").forEach(c => c.checked = v);
+  $$("#corpo input[type=checkbox]").forEach(c => c.checked = v);
   atualizarBotao();
 };
 
 function atualizarBotao(){
   const n = itens.filter(i => i.marcado).length;
   $("#baixar").disabled = n === 0;
-  $("#baixar").textContent = n === 0 ? "Baixar .zip" : `Baixar ${n} em .zip`;
+  $("#baixar").textContent = n === 0 ? "Baixar" : `Baixar ${n} anexo${n===1?"":"s"}`;
+  $("#porAbas").hidden = n === 0;
 }
 
-const escapar = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-
-/* Fora de um cartão do Trello não existe contexto assinado, e as
-   chamadas simplesmente nunca respondem — a página ficaria "Carregando…"
-   para sempre. Esse limite transforma isso numa explicação. */
-const comLimite = (p, ms) => Promise.race([
-  p,
-  new Promise((_, rej) => setTimeout(() => rej(new Error("SEM_CONTEXTO")), ms))
-]);
-
-function telaForaDoTrello(){
-  $("#titulo").textContent = "Abra pelo Trello";
-  telaCentro(`<b>Esta página só funciona dentro de um cartão.</b>
-    Ela não guarda nem mostra dado nenhum por conta própria: quem entrega
-    as informações do cartão é o Trello, e só quando ela é aberta pelo botão
-    <b>Baixar anexos</b> dentro de um cartão de um board onde o Power-Up está ativo.`);
-}
+$("#baixar").onclick = () => disparar("embutido");
+$("#porAbas").onclick = () => disparar("abas");
 
 /* ---------- carregar ---------- */
 async function carregar(){
-  if (!TRELLO_APP_KEY || TRELLO_APP_KEY === "COLE_SUA_CHAVE_AQUI") return telaChaveFaltando();
-
   try {
-    const api = t.getRestApi();
-    if (!(await comLimite(api.isAuthorized(), 8000))) return telaAutorizar();
-    token = await api.getToken();
+    cartao = await comLimite(t.card("id", "name", "attachments"), 8000);
   } catch (e) {
-    if (e && e.message === "SEM_CONTEXTO") return telaForaDoTrello();
-    return telaCentro(`<b>Não consegui falar com a API do Trello.</b>
-      Confira se a chave em config.js é a mesma do Power-Up instalado.`);
+    $("#titulo").textContent = "Abra pelo Trello";
+    return telaCentro(`<b>Esta página só funciona dentro de um cartão.</b>
+      Ela não guarda nem mostra dado nenhum por conta própria: quem entrega as
+      informações é o Trello, e só quando ela é aberta pelo botão
+      <b>Baixar anexos</b> dentro de um cartão.`);
   }
 
-  cartao = await t.card("id", "name", "attachments");
   const anexos = cartao.attachments || [];
-
   if (!anexos.length) {
     $("#titulo").textContent = cartao.name || "Cartão";
     return telaCentro("<b>Este cartão não tem anexos.</b>Nada para baixar aqui.");
   }
 
   itens = anexos.map(a => ({
-    id: a.id,
     nome: a.fileName || a.name || "arquivo",
     bytes: a.bytes,
     url: a.url,
-    data: a.date ? new Date(a.date) : new Date(),
     arquivo: ehArquivo(a),
     marcado: true
   }));
-
   telaLista();
-}
-
-/* ---------- baixar ---------- */
-$("#baixar").onclick = async () => {
-  const alvos = itens.filter(i => i.marcado);
-  const arquivos = alvos.filter(i => i.arquivo);
-  const links = alvos.filter(i => !i.arquivo);
-
-  $("#baixar").disabled = true;
-  document.querySelectorAll("#corpo input").forEach(c => c.disabled = true);
-
-  // "Baixar de novo" começa do zero: limpa o resultado da rodada anterior
-  itens.forEach(i => { i.falhou = false; i.erro = null; });
-  ["#planoB-box", "#diag-box"].forEach(s => { const el = $(s); if (el) el.remove(); });
-  itens.forEach((_, idx) => {
-    const e = $("#e" + idx); if (e) { e.textContent = ""; e.className = "estado"; }
-  });
-
-  const prontos = [];
-  let falhas = 0, feitos = 0;
-
-  for (const i of alvos) {
-    const idx = itens.indexOf(i);
-    const est = $("#e" + idx);
-    if (!i.arquivo) { if (est) est.textContent = "link"; feitos++; continue; }
-
-    if (est) est.textContent = "baixando…";
-    try {
-      const r = await fetch(urlDownload(i), { headers: cabecalhoAuth() });
-      if (!r.ok) { const err = new Error("HTTP " + r.status); err.status = r.status; throw err; }
-      const dados = new Uint8Array(await r.arrayBuffer());
-      prontos.push({ nome: i.nome, dados, data: i.data });
-      if (est) { est.textContent = "✓"; est.className = "estado ok"; }
-    } catch (e) {
-      falhas++;
-      i.falhou = true;
-      i.erro = descreverErro(e);
-      if (est) { est.textContent = "falhou"; est.className = "estado erro"; }
-      console.error("anexo", i.nome, e);
-    }
-    feitos++;
-    $("#progresso").textContent = `${feitos} de ${alvos.length}`;
-  }
-
-  if (links.length) {
-    const txt = links.map(l => `${l.nome}\n${l.url}\n`).join("\n");
-    prontos.push({ nome: "_links.txt", dados: new TextEncoder().encode(txt), data: new Date() });
-  }
-
-  if (!prontos.length) {
-    $("#progresso").innerHTML = `<span class="erro">Nenhum anexo baixou.</span>`;
-    mostrarPlanoB();
-    mostrarDiagnostico();
-    $("#baixar").disabled = false;
-    $("#baixar").textContent = "Tentar de novo";
-    document.querySelectorAll("#corpo input").forEach(c => c.disabled = false);
-    return;
-  }
-
-  const zip = ZipSimples.criarZip(prontos);
-  const nomeZip = (ZipSimples.nomeSeguro(cartao.name || "cartao") + " — anexos.zip");
-  const blob = new Blob([zip], { type: "application/zip" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = nomeZip;
-  document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
-
-  $("#progresso").innerHTML = falhas
-    ? `<span class="erro">${falhas} falhou(ram)</span> · ${prontos.length} no zip`
-    : `<span class="ok">Pronto — ${prontos.length} no zip</span>`;
-  if (falhas) { mostrarPlanoB(); mostrarDiagnostico(); }
-  $("#baixar").disabled = false;
-  $("#baixar").textContent = "Baixar de novo";
-  document.querySelectorAll("#corpo input").forEach(c => c.disabled = false);
-};
-
-/* Se a API recusar o download direto, ainda dá para abrir cada anexo
-   numa aba: ali quem autentica é o cookie de sessão do Trello. */
-/* Painel de diagnóstico: agrupa as causas reais das falhas e mostra a
-   URL usada, para não ser preciso abrir o console do navegador. */
-function mostrarDiagnostico(){
-  const falhados = itens.filter(i => i.falhou);
-  if (!falhados.length) return;
-  const antigo = $("#diag-box"); if (antigo) antigo.remove();
-
-  const contagem = {};
-  falhados.forEach(i => { contagem[i.erro] = (contagem[i.erro] || 0) + 1; });
-  const causas = Object.entries(contagem)
-    .map(([causa, n]) => `<li><b>${escapar(causa)}</b> — ${n} anexo${n===1?"":"s"}</li>`).join("");
-
-  const cors = falhados.some(i => /CORS/.test(i.erro || ""));
-  const explica = cors
-    ? `O navegador barrou a leitura antes de o arquivo chegar. Isso <b>não</b> se resolve
-       com ajuste de chave ou de permissão — significa que os bytes não podem ser lidos
-       por JavaScript a partir deste endereço. O Plano B abaixo contorna, e eu tenho
-       outros caminhos se você quiser o zip de volta.`
-    : `A requisição chegou ao Trello e ele recusou. Códigos 401/403 apontam para a
-       credencial (chave, token ou permissão); 404 significa que a URL do anexo mudou.`;
-
-  const div = document.createElement("div");
-  div.className = "aviso"; div.id = "diag-box";
-  div.innerHTML = `<b>Diagnóstico</b><ul style="margin:8px 0 8px 18px;padding:0">${causas}</ul>
-    ${explica}
-    <div style="margin-top:10px;font-size:11.5px;color:var(--ink2);word-break:break-all">
-      Endereço usado:<br>${escapar(urlDownload(falhados[0]).replace(/\/download\/.*$/, "/download/…"))}
-    </div>`;
-  $("#corpo").prepend(div);
-}
-
-function mostrarPlanoB(){
-  const falhados = itens.filter(i => i.falhou);          // só o que realmente falhou
-  if (!falhados.length) return;
-  const antigo = $("#planoB-box"); if (antigo) antigo.remove();
-  const div = document.createElement("div");
-  div.className = "aviso";
-  div.id = "planoB-box";
-  div.innerHTML = `<b>Plano B para ${falhados.length === 1 ? "o anexo que falhou" : `os ${falhados.length} que falharam`}:</b>
-    abrir numa aba e salvar pelo navegador — ali quem autentica é a sua sessão do Trello.
-    Pode ser preciso liberar pop-ups deste site.
-    <div style="margin-top:10px"><button id="planoB">Abrir ${falhados.length} aba${falhados.length===1?"":"s"}</button></div>`;
-  $("#corpo").prepend(div);
-  $("#planoB").onclick = () => falhados.forEach((i, n) =>
-    setTimeout(() => window.open(i.url, "_blank", "noopener"), n * 350));
 }
 
 carregar().catch(e => {
   console.error(e);
-  telaCentro(`<b>Algo deu errado.</b>${e && e.message ? " " + escapar(e.message) : ""}`);
+  telaCentro(`<b>Algo deu errado.</b> ${escapar(e && e.message || "")}`);
 });
 </script>
 </body>
