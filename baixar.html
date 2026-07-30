@@ -15,6 +15,8 @@
          --azul:#579dff; --azul2:#85b8ff; }
 }
 *{box-sizing:border-box}
+/* display:flex no .rodape venceria o [hidden], que só vale display:none */
+[hidden]{display:none !important}
 body{
   margin:0; background:var(--bg); color:var(--ink);
   font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -194,15 +196,32 @@ function atualizarBotao(){
 
 const escapar = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
+/* Fora de um cartão do Trello não existe contexto assinado, e as
+   chamadas simplesmente nunca respondem — a página ficaria "Carregando…"
+   para sempre. Esse limite transforma isso numa explicação. */
+const comLimite = (p, ms) => Promise.race([
+  p,
+  new Promise((_, rej) => setTimeout(() => rej(new Error("SEM_CONTEXTO")), ms))
+]);
+
+function telaForaDoTrello(){
+  $("#titulo").textContent = "Abra pelo Trello";
+  telaCentro(`<b>Esta página só funciona dentro de um cartão.</b>
+    Ela não guarda nem mostra dado nenhum por conta própria: quem entrega
+    as informações do cartão é o Trello, e só quando ela é aberta pelo botão
+    <b>Baixar anexos</b> dentro de um cartão de um board onde o Power-Up está ativo.`);
+}
+
 /* ---------- carregar ---------- */
 async function carregar(){
   if (!TRELLO_APP_KEY || TRELLO_APP_KEY === "COLE_SUA_CHAVE_AQUI") return telaChaveFaltando();
 
   try {
     const api = t.getRestApi();
-    if (!(await api.isAuthorized())) return telaAutorizar();
+    if (!(await comLimite(api.isAuthorized(), 8000))) return telaAutorizar();
     token = await api.getToken();
   } catch (e) {
+    if (e && e.message === "SEM_CONTEXTO") return telaForaDoTrello();
     return telaCentro(`<b>Não consegui falar com a API do Trello.</b>
       Confira se a chave em config.js é a mesma do Power-Up instalado.`);
   }
