@@ -21,6 +21,12 @@
 // um SVG que use currentColor (é o caso do nosso icone.svg).
 const ICONE = window.location.origin + window.location.pathname.replace(/index\.html$/, "") + "icone.svg";
 
+/* O GitHub Pages serve com cache-control: max-age=600, e o Trello guarda
+   as janelas do Power-Up por conta própria. Sem isto, uma versão velha
+   pode continuar rodando por muito tempo depois do deploy.
+   Suba este número sempre que mexer em cartoes.html ou baixar.html. */
+const VERSAO = "3";
+
 TrelloPowerUp.initialize({
   // Botão no cabeçalho do board: baixa de vários cartões de uma vez.
   // Fica à vista, diferente do botão de cartão, que a interface nova do
@@ -31,7 +37,7 @@ TrelloPowerUp.initialize({
       text: "AtDownloader",
       callback: function (t) {
         return t.modal({
-          url: "./cartoes.html",
+          url: "./cartoes.html?v=" + VERSAO,
           title: "Baixar anexos do board",
           fullscreen: true,
           accentColor: "#0079BF"
@@ -46,7 +52,7 @@ TrelloPowerUp.initialize({
       condition: "edit",
       callback: function (t) {
         return t.modal({
-          url: "./baixar.html",
+          url: "./baixar.html?v=" + VERSAO,
           title: "Baixar anexos do cartão",
           height: 540,
           accentColor: "#0079BF"
