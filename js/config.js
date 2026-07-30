@@ -10,7 +10,7 @@
    navegador. Por isso não tem problema esta chave ficar no código.
    ───────────────────────────────────────────────────────────── */
 
-const TRELLO_APP_KEY = "COLE_SUA_CHAVE_AQUI";
+const TRELLO_APP_KEY = "0fa59933b76c785c38aeaf1e5ef47ca1";
 
 /* Nome do Power-Up. Aparece na lista de Power-Ups do board e, mais
    importante, na tela em que o Trello pede sua autorização — então
