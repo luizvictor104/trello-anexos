@@ -144,7 +144,37 @@ async function apiVarios(caminhos) {
   throw e;
 }
 
+/* O Chrome relê o popup.js do disco toda vez que a janela abre, mas só relê o
+   manifest.json quando a extensão é recarregada. Dá para ficar com código novo
+   e permissões velhas — e aí chrome.scripting e chrome.cookies simplesmente
+   não existem, o que produz um erro que não parece ter nada a ver. */
+function permissoesFaltando() {
+  const faltam = [];
+  if (!chrome.scripting) faltam.push("scripting");
+  if (!chrome.cookies) faltam.push("cookies");
+  if (!chrome.tabs || !chrome.tabs.query) faltam.push("tabs");
+  return faltam;
+}
+
+function telaPermissoes(faltam) {
+  $("#titulo").textContent = "Falta recarregar a extensão";
+  $("#sub").textContent = "";
+  $("#rodape").hidden = true;
+  return telaCentro(`<b>O Chrome ainda está com as permissões antigas.</b>
+    Não chegaram: <code>${faltam.join("</code>, <code>")}</code>.
+    <div class="aviso" style="text-align:left; margin-top:14px">
+      O <code>popup.js</code> é lido do disco toda vez que esta janela abre, mas
+      o <code>manifest.json</code> — onde ficam as permissões — só é relido
+      quando a extensão é recarregada.
+      <div style="margin-top:9px"><b>Feche o Chrome com ⌘Q e abra de novo.</b>
+      Ou desligue e ligue o interruptor da extensão em
+      <code>chrome://extensions</code>.</div>
+    </div>`);
+}
+
 function telaSemSessao(titulo) {
+  const faltam = permissoesFaltando();
+  if (faltam.length) return telaPermissoes(faltam);
   $("#titulo").textContent = titulo;
   const linhas = diagnostico.map(d => `<li>${escapar(d)}</li>`).join("");
   return telaCentro(`<b>Não consegui ler seus dados do Trello.</b>
@@ -158,6 +188,9 @@ function telaSemSessao(titulo) {
 /* Se a aba já está num board, usa ele. Se não, mostra a lista para escolher —
    assim a extensão serve mesmo com o Trello fechado. */
 async function carregar() {
+  const faltam = permissoesFaltando();
+  if (faltam.length) return telaPermissoes(faltam);
+
   const [aba] = await chrome.tabs.query({ active: true, currentWindow: true });
   const m = (aba && aba.url || "").match(/^https:\/\/trello\.com\/b\/([a-zA-Z0-9]+)/);
   if (!m) return telaEscolherBoard();
