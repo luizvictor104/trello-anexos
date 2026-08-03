@@ -67,8 +67,9 @@ a{color:var(--azul)}
     <button id="baixar">Baixar</button>
     <span id="progresso" style="font-size:12.5px;color:var(--ink2);flex:1"></span>
   </div>
-  <div style="margin-top:8px">
-    <button class="discreto" id="porAbas">Prefere abrir em abas?</button>
+  <div style="margin-top:8px; display:flex; gap:14px; flex-wrap:wrap">
+    <button class="discreto" id="porAbas">Abrir em abas</button>
+    <button class="discreto" id="porZip" title="Precisa de um proxy: o Trello não deixa o navegador ler os bytes de outra origem">Baixar em .zip (ainda não funciona)</button>
   </div>
 </div>
 
@@ -106,6 +107,19 @@ function ehArquivo(a){
   return /\/attachments\/[a-f0-9]{24}\/download\//i.test(a.url || "");
 }
 
+/* O Trello só manda Content-Disposition: attachment no que o navegador NÃO
+   sabe exibir. Medido em 03/08/2026: pdf vem como attachment; png, jpeg, mp4,
+   quicktime e mpeg vêm sem o cabeçalho, e o navegador exibe em vez de salvar.
+   Como não dá para ler o cabeçalho de outra origem (o mesmo CORS que barra o
+   zip), isto é deduzido do tipo — por isso a tela fala em "abre para ver",
+   e não promete que salvou. */
+function ehExibivel(a){
+  const mt = String(a.mimeType || "").toLowerCase();
+  if (mt) return /^(image|video|audio)\//.test(mt);
+  const nome = String(a.fileName || a.name || "");
+  return /\.(png|jpe?g|gif|webp|avif|bmp|ico|svg|mp4|mov|m4v|webm|ogv|mp3|wav|ogg|m4a|aac|flac)$/i.test(nome);
+}
+
 const cabecalhoAuth = () =>
   ({ Authorization: `OAuth oauth_consumer_key="${TRELLO_APP_KEY}", oauth_token="${token}"` });
 
@@ -132,9 +146,70 @@ function abrirEmAbas(urls){
   urls.forEach((u, i) => setTimeout(() => window.open(u, "_blank", "noopener"), i * 350));
 }
 
+/* iframe escondido: para quem vem com Content-Disposition: attachment, o
+   navegador salva sem abrir aba e sem esbarrar no bloqueador de pop-up.
+   Para imagem/vídeo/áudio isto não serve — o arquivo seria só renderizado
+   dentro do iframe invisível, que é exatamente o bug de 819ea1b. */
+function baixarEmbutido(urls){
+  urls.forEach((u, i) => setTimeout(() => {
+    const f = document.createElement("iframe");
+    f.style.display = "none"; f.src = u;
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 60000);
+  }, i * 400));
+}
+
+function baixarDireto(){
+  const alvos = itens.filter(i => i.marcado);
+  if (!alvos.length) return;
+
+  const salvam = alvos.filter(i => i.arquivo && !i.exibivel);
+  const abrem  = alvos.filter(i => !i.arquivo || i.exibivel);
+
+  baixarEmbutido(salvam.map(i => i.url));
+  salvam.forEach(i => { const el = $("#e" + itens.indexOf(i));
+    if (el) { el.textContent = "↓"; el.className = "estado ok"; } });
+  abrem.forEach(i => { const el = $("#e" + itens.indexOf(i));
+    if (el) { el.textContent = "abre"; el.className = "estado"; } });
+
+  const partes = [];
+  if (salvam.length) partes.push(`${salvam.length} enviado${salvam.length===1?"":"s"} para a pasta de Downloads`);
+  if (abrem.length)  partes.push(`<span class="erro">${abrem.length} o navegador não salva</span>`);
+  $("#progresso").innerHTML = partes.join(" · ");
+
+  const antigo = $("#planoB-box"); if (antigo) antigo.remove();
+  if (abrem.length) {
+    const box = document.createElement("div");
+    box.id = "planoB-box"; box.className = "aviso";
+    box.innerHTML = `<b>${abrem.length} anexo${abrem.length===1?"":"s"} o Trello entrega para exibir.</b>
+      Abrindo em abas dá para salvar cada um com ⌘S.
+      <div style="margin-top:9px"><button id="planoB-btn">Abrir ${abrem.length} em abas</button></div>`;
+    $("#corpo").prepend(box);
+    $("#planoB-btn").onclick = () => abrirEmAbas(abrem.map(i => i.url));
+  }
+}
+
+/* O token só faz falta aqui: t.card() monta a lista sem ele, e o download
+   direto vai pelo cookie de sessão do próprio navegador. */
+async function garantirToken(){
+  if (token) return true;
+  const api = t.getRestApi();
+  if (!(await comLimite(api.isAuthorized(), 8000))) {
+    await api.authorize({ scope: "read", expiration: "never" });
+  }
+  token = await api.getToken();
+  return !!token;
+}
+
 async function baixarZip(){
   const alvos = itens.filter(i => i.marcado);
   if (!alvos.length) return;
+
+  try { await garantirToken(); }
+  catch (e) {
+    $("#progresso").innerHTML = `<span class="erro">Sem autorização: ${escapar(descreverErro(e))}</span>`;
+    return;
+  }
 
   $("#baixar").disabled = true;
   $$("#corpo input").forEach(c => c.disabled = true);
@@ -236,9 +311,15 @@ function telaLista(){
     + (total ? ` · ${kb(total)}` : "")
     + (links.length ? ` · ${links.length} link${links.length===1?"":"s"}` : "");
 
-  let html = `<div class="aviso">Os anexos são baixados aqui e salvos como um
-    <b>.zip único</b> na sua pasta de Downloads.${links.length
-      ? " Anexos que são link viram um <b>_links.txt</b> dentro do zip." : ""}</div>`;
+  const exibiveis = arquivos.filter(i => i.exibivel).length;
+
+  let html = "";
+  if (exibiveis) {
+    html += `<div class="aviso"><b>${exibiveis} de ${arquivos.length} arquivo${arquivos.length===1?"":"s"}
+      o navegador não salva sozinho.</b> O Trello entrega imagem, vídeo e áudio para
+      <b>exibir</b>, não para baixar — eles abrem numa aba e você salva com ⌘S.
+      O resto (pdf, zip, doc…) cai direto na pasta de Downloads.</div>`;
+  }
 
   html += `<div class="marcar">
       <button onclick="marcarTodos(true)">Marcar todos</button>
@@ -250,7 +331,8 @@ function telaLista(){
       <input type="checkbox" data-i="${idx}" ${i.marcado ? "checked" : ""}>
       <span class="nome">
         <b>${escapar(i.nome)}</b>
-        <span>${i.arquivo ? kb(i.bytes) : "link — vai para o _links.txt"}</span>
+        <span>${!i.arquivo ? "link — abre numa aba"
+          : kb(i.bytes) + (i.exibivel ? " · abre para ver" : " · salva direto")}</span>
       </span>
       <span class="estado" id="e${idx}"></span>
     </label>`).join("");
@@ -273,11 +355,13 @@ window.marcarTodos = v => {
 function atualizarBotao(){
   const n = itens.filter(i => i.marcado).length;
   $("#baixar").disabled = n === 0;
-  $("#baixar").textContent = n === 0 ? "Baixar" : `Baixar ${n} anexo${n===1?"":"s"} em .zip`;
+  $("#baixar").textContent = n === 0 ? "Baixar" : `Baixar ${n} anexo${n===1?"":"s"}`;
   $("#porAbas").hidden = n === 0;
+  $("#porZip").hidden = n === 0;
 }
 
-$("#baixar").onclick = baixarZip;
+$("#baixar").onclick = baixarDireto;
+$("#porZip").onclick = baixarZip;
 $("#porAbas").onclick = () => abrirEmAbas(itens.filter(i => i.marcado).map(i => i.url));
 
 /* ---------- carregar ---------- */
@@ -304,40 +388,17 @@ async function carregar(){
     return telaCentro("<b>Este cartão não tem anexos.</b>Nada para baixar aqui.");
   }
 
-  // O token só é preciso para buscar os bytes, mas pedir agora evita montar
-  // a lista inteira e só então descobrir que não dá para baixar.
-  try {
-    const api = t.getRestApi();
-    if (!(await comLimite(api.isAuthorized(), 8000))) {
-      $("#titulo").textContent = "Autorização necessária";
-      return telaCentro(`<b>Preciso da sua permissão para baixar os anexos.</b>
-        A permissão é de <b>leitura</b> e o token fica guardado só neste navegador.
-        <div style="margin-top:16px"><button id="autorizar">Autorizar</button></div>`);
-    }
-    token = await api.getToken();
-  } catch (e) {
-    return telaCentro(`<b>Não consegui falar com a API do Trello.</b> ${escapar(descreverErro(e))}
-      <div style="margin-top:8px">Confira se a chave em config.js é a mesma do Power-Up instalado.</div>`);
-  }
-
   itens = anexos.map(a => ({
     nome: a.fileName || a.name || "arquivo",
     bytes: a.bytes,
     url: a.url,
     data: a.date ? new Date(a.date) : new Date(),
     arquivo: ehArquivo(a),
+    exibivel: ehExibivel(a),
     marcado: true
   }));
   telaLista();
 }
-
-// O botão Autorizar nasce dentro de telaCentro(), depois deste script rodar.
-document.addEventListener("click", async e => {
-  if (e.target && e.target.id === "autorizar") {
-    try { await t.getRestApi().authorize({ scope: "read", expiration: "never" }); carregar(); }
-    catch (err) { telaCentro(`<b>Não consegui autorizar.</b> ${escapar(descreverErro(err))}`); }
-  }
-});
 
 carregar().catch(e => {
   console.error(e);
