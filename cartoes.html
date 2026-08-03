@@ -8,11 +8,11 @@
 :root{
   color-scheme: light dark;
   --bg:#fff; --bg2:#f4f5f7; --ink:#172b4d; --ink2:#5e6c84; --linha:#dfe1e6;
-  --azul:#0079bf; --azul2:#005a8c; --verde:#61bd4f; --amarelo:#f2d600;
+  --azul:#0079bf; --azul2:#005a8c; --verde:#61bd4f; --amarelo:#f2d600; --vermelho:#eb5a46;
 }
 @media (prefers-color-scheme: dark){
   :root{ --bg:#1d2125; --bg2:#22272b; --ink:#b6c2cf; --ink2:#8c9bab; --linha:#2c333a;
-         --azul:#579dff; --azul2:#85b8ff; }
+         --azul:#579dff; --azul2:#85b8ff; --vermelho:#f87168; }
 }
 *{box-sizing:border-box}
 [hidden]{display:none !important}
@@ -41,15 +41,20 @@ button:disabled{opacity:.5; cursor:default}
 .item .nome{flex:1; min-width:0}
 .item .nome b{display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .item .nome span{font-size:12px; color:var(--ink2)}
-.item .estado{flex:none; font-size:12px; color:var(--verde); min-width:20px; text-align:right}
+.item .estado{flex:none; font-size:12px; color:var(--ink2); min-width:20px; text-align:right}
+.estado.ok{color:var(--verde)}
+.estado.erro{color:var(--vermelho)}
 .aviso{background:var(--bg2); border:1px solid var(--linha); border-left:3px solid var(--amarelo);
   border-radius:3px; padding:11px 13px; margin:12px 0; font-size:13px; line-height:1.5}
+.aviso.ruim{border-left-color:var(--vermelho)}
+.aviso ul{margin:7px 0 0; padding-left:20px}
 .centro{text-align:center; padding:34px 20px; color:var(--ink2)}
 .centro b{display:block; color:var(--ink); font-size:15px; margin-bottom:6px}
 .marcar{font-size:12.5px; color:var(--ink2); padding:8px 2px; display:flex; gap:12px}
 .marcar button, .discreto{background:none; color:var(--azul); padding:0; font-size:12.5px; font-weight:400;
   border:0; cursor:pointer; font-family:inherit}
 .marcar button:hover, .discreto:hover{background:none; text-decoration:underline}
+.ok{color:var(--verde)} .erro{color:var(--vermelho)}
 a{color:var(--azul)}
 </style>
 </head>
@@ -76,17 +81,24 @@ a{color:var(--azul)}
 
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 <script src="js/config.js"></script>
+<script src="js/zip.js"></script>
 <script>
 "use strict";
 
-/* Sem token e sem API REST: t.cards() entrega os cartões do board com
-   os anexos, e quem baixa é o navegador, pela sua sessão do Trello. */
+/* A lista de cartões vem de t.cards(), que não precisa de token. Já os BYTES
+   de cada anexo precisam: a URL de download do Trello não aceita o cookie de
+   sessão de outra origem, então vai por Authorization: OAuth.
+
+   Por que não dá para deixar o navegador baixar sozinho (era o desenho antigo):
+   a URL de download não manda mais Content-Disposition: attachment. Apontar um
+   iframe ou uma aba para ela só EXIBE o arquivo — nada é salvo. Por isso os
+   bytes são buscados aqui e viram um zip montado no cliente. */
 
 const t = window.TrelloPowerUp.iframe({ appKey: TRELLO_APP_KEY, appName: APP_NOME });
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 
-let board = null, grupos = [], itens = [];
+let board = null, grupos = [], itens = [], token = null;
 
 const kb = n => {
   if (n == null || !isFinite(n)) return "";
@@ -100,36 +112,26 @@ function ehArquivo(a){
   if (typeof a.bytes === "number" && a.bytes > 0) return true;
   return /\/attachments\/[a-f0-9]{24}\/download\//i.test(a.url || "");
 }
+
+const cabecalhoAuth = () =>
+  ({ Authorization: `OAuth oauth_consumer_key="${TRELLO_APP_KEY}", oauth_token="${token}"` });
+
+/* api.trello.com é o host da API; trello.com serve o mesmo arquivo, mas os
+   dois só respondem ao preflight de CORS no caminho /1/. */
+const urlApi = u => String(u || "").replace(/^https:\/\/trello\.com\/1\//, "https://api.trello.com/1/");
+
+/* TypeError sem status = o navegador barrou (CORS). HTTP com status = o
+   Trello respondeu e recusou. As duas coisas pedem soluções opostas. */
+function descreverErro(e){
+  if (e && e.status) return `HTTP ${e.status}`;
+  if (e instanceof TypeError) return "bloqueado pelo navegador (CORS)";
+  return (e && e.message) || "desconhecido";
+}
+
 const comLimite = (p, ms) => Promise.race([
   p, new Promise((_, rej) => setTimeout(() => rej(new Error("SEM_CONTEXTO")), ms))
 ]);
 function telaCentro(html){ $("#corpo").innerHTML = `<div class="centro">${html}</div>`; }
-
-function baixarEmbutido(urls){
-  urls.forEach((u, i) => setTimeout(() => {
-    const f = document.createElement("iframe");
-    f.style.display = "none"; f.src = u;
-    document.body.appendChild(f);
-    setTimeout(() => f.remove(), 60000);
-  }, i * 400));
-}
-function baixarPorAbas(urls){
-  urls.forEach((u, i) => setTimeout(() => window.open(u, "_blank", "noopener"), i * 350));
-}
-
-function disparar(modo){
-  const alvos = itens.filter(i => i.marcado);
-  if (!alvos.length) return;
-  const arquivos = alvos.filter(i => i.arquivo);
-  const links = alvos.filter(i => !i.arquivo);
-  (modo === "abas" ? baixarPorAbas : baixarEmbutido)(arquivos.map(i => i.url));
-  // Link não é arquivo: num iframe escondido ele só carregaria a página
-  // e nada chegaria ao usuário. Link sempre abre em aba.
-  if (links.length) baixarPorAbas(links.map(i => i.url));
-  alvos.forEach(i => { const el = $("#e" + i.idx); if (el) el.textContent = "✓"; });
-  $("#progresso").textContent =
-    `${alvos.length} anexo${alvos.length===1?"":"s"} enviado${alvos.length===1?"":"s"} para o navegador`;
-}
 
 /* ---------- tela ---------- */
 function telaLista(){
@@ -140,9 +142,13 @@ function telaLista(){
   $("#sub").textContent = `${grupos.length} cartão${grupos.length===1?"":"es"} com anexo · `
     + `${arquivos.length} arquivo${arquivos.length===1?"":"s"}` + (total ? ` · ${kb(total)}` : "");
 
-  let html = `<div class="aviso">Os arquivos são baixados pelo próprio navegador, um a um,
-    direto para a sua pasta de Downloads. Na primeira vez o navegador pergunta se pode
-    <b>baixar vários arquivos</b> — é normal, é só permitir.</div>`;
+  let html = "";
+  if (total > 500 * 1048576) {
+    html += `<div class="aviso"><b>São ${kb(total)} no total.</b> O zip é montado na
+      memória do navegador antes de ser salvo. Se travar, marque menos cartões por vez.</div>`;
+  }
+  html += `<div class="aviso">Cada cartão vira uma <b>pasta dentro do zip</b>, com o nome do cartão.
+    Anexos que são link viram um <b>_links.txt</b> na pasta do cartão.</div>`;
 
   html += `<div class="marcar">
       <button onclick="marcarTodos(true)">Marcar todos</button>
@@ -161,7 +167,7 @@ function telaLista(){
           <input type="checkbox" data-i="${i.idx}" ${i.marcado?"checked":""}>
           <span class="nome">
             <b>${escapar(i.nome)}</b>
-            <span>${i.arquivo ? kb(i.bytes) : "link — abre numa aba"}</span>
+            <span>${i.arquivo ? kb(i.bytes) : "link — vai para o _links.txt"}</span>
           </span>
           <span class="estado" id="e${i.idx}"></span>
         </label>`).join("")}
@@ -209,15 +215,121 @@ window.marcarTodos = v => {
 function atualizarBotao(){
   const n = itens.filter(i => i.marcado).length;
   $("#baixar").disabled = n === 0;
-  $("#baixar").textContent = n === 0 ? "Baixar" : `Baixar ${n} anexo${n===1?"":"s"}`;
+  $("#baixar").textContent = n === 0 ? "Baixar" : `Baixar ${n} anexo${n===1?"":"s"} em .zip`;
   $("#porAbas").hidden = n === 0;
 }
 
-$("#baixar").onclick = () => disparar("embutido");
-$("#porAbas").onclick = () => disparar("abas");
+/* ---------- baixar ---------- */
+function abrirEmAbas(urls){
+  urls.forEach((u, i) => setTimeout(() => window.open(u, "_blank", "noopener"), i * 350));
+}
+
+async function baixarZip(){
+  const alvos = itens.filter(i => i.marcado);
+  if (!alvos.length) return;
+
+  $("#baixar").disabled = true;
+  $$("#corpo input").forEach(c => c.disabled = true);
+  ["#planoB-box","#diag-box"].forEach(s => { const el = $(s); if (el) el.remove(); });
+  itens.forEach(i => { i.falhou = false; i.erro = null;
+    const el = $("#e" + i.idx); if (el) { el.textContent = ""; el.className = "estado"; } });
+
+  const prontos = [];
+  const arquivos = alvos.filter(i => i.arquivo);
+  let falhas = 0, feitos = 0;
+
+  for (const i of arquivos) {
+    const est = $("#e" + i.idx);
+    if (est) { est.textContent = "…"; est.className = "estado"; }
+    try {
+      const r = await fetch(urlApi(i.url), { headers: cabecalhoAuth() });
+      if (!r.ok) { const err = new Error("HTTP " + r.status); err.status = r.status; throw err; }
+      prontos.push({ nome: i.nome, dados: new Uint8Array(await r.arrayBuffer()),
+                     data: i.data, pasta: i.cartao });
+      if (est) { est.textContent = "✓"; est.className = "estado ok"; }
+    } catch (e) {
+      falhas++; i.falhou = true; i.erro = descreverErro(e);
+      if (est) { est.textContent = i.erro; est.className = "estado erro"; }
+      console.error("anexo", i.cartao, i.nome, e);
+    }
+    feitos++;
+    $("#progresso").textContent = `${feitos} de ${arquivos.length} arquivos`;
+  }
+
+  // links não têm bytes para zipar: viram um txt por cartão
+  const links = alvos.filter(i => !i.arquivo);
+  const porCartao = {};
+  links.forEach(i => { (porCartao[i.cartao] = porCartao[i.cartao] || []).push(`${i.nome}\n${i.url}\n`); });
+  Object.entries(porCartao).forEach(([cartao, ls]) => {
+    prontos.push({ nome: "_links.txt", dados: new TextEncoder().encode(ls.join("\n")),
+                   data: new Date(), pasta: cartao });
+  });
+  links.forEach(i => { const el = $("#e" + i.idx); if (el) { el.textContent = "✓"; el.className = "estado ok"; } });
+
+  if (!prontos.length) {
+    $("#progresso").innerHTML = `<span class="erro">Nenhum anexo baixou. O zip não foi criado.</span>`;
+    mostrarDiagnostico(); mostrarPlanoB(arquivos.filter(i => i.falhou));
+    $("#baixar").disabled = false;
+    $$("#corpo input").forEach(c => c.disabled = false);
+    return;
+  }
+
+  const zip = ZipSimples.criarZip(prontos);
+  const blob = new Blob([zip], { type: "application/zip" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = ZipSimples.nomeSeguro(board.name || "board") + " — anexos.zip";
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
+
+  $("#progresso").innerHTML = falhas
+    ? `<span class="erro">${falhas} falhou(ram)</span> · ${prontos.length} no zip`
+    : `<span class="ok">Pronto — ${prontos.length} arquivo${prontos.length===1?"":"s"} no zip</span>`;
+  if (falhas) { mostrarDiagnostico(); mostrarPlanoB(arquivos.filter(i => i.falhou)); }
+
+  $("#baixar").disabled = false;
+  $("#baixar").textContent = "Baixar de novo";
+  $$("#corpo input").forEach(c => c.disabled = false);
+}
+
+function mostrarDiagnostico(){
+  const ruins = itens.filter(i => i.falhou);
+  if (!ruins.length) return;
+  const antigo = $("#diag-box"); if (antigo) antigo.remove();
+  const contagem = {};
+  ruins.forEach(i => { contagem[i.erro] = (contagem[i.erro] || 0) + 1; });
+  const causas = Object.entries(contagem)
+    .map(([causa, n]) => `<li><b>${escapar(causa)}</b> — ${n} anexo${n===1?"":"s"}</li>`).join("");
+  const box = document.createElement("div");
+  box.id = "diag-box"; box.className = "aviso ruim";
+  box.innerHTML = `<b>Por que falhou:</b><ul>${causas}</ul>`;
+  $("#corpo").prepend(box);
+}
+
+function mostrarPlanoB(ruins){
+  if (!ruins.length) return;
+  const antigo = $("#planoB-box"); if (antigo) antigo.remove();
+  const box = document.createElement("div");
+  box.id = "planoB-box"; box.className = "aviso";
+  box.innerHTML = `Dá para abrir os que falharam em abas e salvar à mão
+    (o Trello exibe o arquivo; use ⌘S em cada aba).
+    <div style="margin-top:9px"><button id="planoB-btn">Abrir ${ruins.length} em abas</button></div>`;
+  $("#corpo").prepend(box);
+  $("#planoB-btn").onclick = () => abrirEmAbas(ruins.map(i => i.url));
+}
+
+$("#baixar").onclick = baixarZip;
+$("#porAbas").onclick = () => abrirEmAbas(itens.filter(i => i.marcado).map(i => i.url));
 
 /* ---------- carregar ---------- */
 async function carregar(){
+  if (!TRELLO_APP_KEY || TRELLO_APP_KEY === "COLE_SUA_CHAVE_AQUI") {
+    $("#titulo").textContent = "Falta configurar a chave";
+    return telaCentro(`<b>O arquivo js/config.js ainda está com o texto de exemplo.</b>
+      Pegue a chave em <a href="https://trello.com/apps/admin" target="_blank">trello.com/apps/admin</a>.`);
+  }
+
   let cards;
   try {
     board = await comLimite(t.board("id", "name"), 8000);
@@ -229,12 +341,30 @@ async function carregar(){
       Trello, e só quando ela é aberta pelo botão <b>AtDownloader</b> no board.`);
   }
 
+  // O token só é preciso para buscar os bytes, mas pedir agora evita
+  // montar a lista inteira e só então descobrir que não dá para baixar.
+  try {
+    const api = t.getRestApi();
+    if (!(await comLimite(api.isAuthorized(), 8000))) {
+      $("#titulo").textContent = "Autorização necessária";
+      return telaCentro(`<b>Preciso da sua permissão para baixar os anexos.</b>
+        A permissão é de <b>leitura</b> e o token fica guardado só neste navegador.
+        <div style="margin-top:16px"><button id="autorizar">Autorizar</button></div>`);
+    }
+    token = await api.getToken();
+  } catch (e) {
+    return telaCentro(`<b>Não consegui falar com a API do Trello.</b> ${escapar(descreverErro(e))}
+      <div style="margin-top:8px">Confira se a chave em config.js é a mesma do Power-Up instalado.</div>`);
+  }
+
   let idx = 0;
   grupos = (cards || []).map(c => {
     const lista = (c.attachments || []).map(a => ({
       idx: idx++,
       nome: a.fileName || a.name || "arquivo",
       bytes: a.bytes, url: a.url,
+      data: a.date ? new Date(a.date) : new Date(),
+      cartao: c.name,
       arquivo: ehArquivo(a), marcado: true
     }));
     return { nome: c.name, itens: lista };
@@ -248,6 +378,14 @@ async function carregar(){
   }
   telaLista();
 }
+
+// O botão Autorizar nasce dentro de telaCentro(), depois deste script rodar.
+document.addEventListener("click", async e => {
+  if (e.target && e.target.id === "autorizar") {
+    try { await t.getRestApi().authorize({ scope: "read", expiration: "never" }); carregar(); }
+    catch (err) { telaCentro(`<b>Não consegui autorizar.</b> ${escapar(descreverErro(err))}`); }
+  }
+});
 
 carregar().catch(e => {
   console.error(e);
