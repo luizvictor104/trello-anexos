@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "AtDownloader — anexos do Trello",
+  "version": "1.0.0",
+  "description": "Baixa os anexos de um board do Trello com o nome certo, em pastas por cartão.",
+
+  "permissions": ["downloads", "activeTab"],
+
+  "host_permissions": [
+    "https://trello.com/*",
+    "https://api.trello.com/*"
+  ],
+
+  "action": {
+    "default_title": "Baixar anexos deste board",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icone-16.png",
+      "32": "icone-32.png",
+      "48": "icone-48.png",
+      "128": "icone-128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icone-16.png",
+    "32": "icone-32.png",
+    "48": "icone-48.png",
+    "128": "icone-128.png"
+  }
+}
