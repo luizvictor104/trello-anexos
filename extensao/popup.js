@@ -53,11 +53,106 @@ function nomeSeguro(nome) {
     .slice(0, 120) || "arquivo";
 }
 
-/* ---------- ler o board ---------- */
-async function api(caminho) {
-  const r = await fetch("https://api.trello.com/1" + caminho, { credentials: "include" });
-  if (!r.ok) { const e = new Error("HTTP " + r.status); e.status = r.status; throw e; }
-  return r.json();
+/* ---------- ler o board ----------
+   Três caminhos, do mais garantido para o menos. O primeiro existe porque o
+   Trello protege a API contra pedidos vindos de fora do site (CSRF): mandar
+   só o cookie não basta. Dentro de uma aba do trello.com o pedido é do
+   próprio site, e aí funciona sempre — foi assim que testei a API a tarde
+   toda. Os outros dois são para quando não há aba do Trello aberta. */
+
+const diagnostico = [];   // guarda o que cada tentativa respondeu
+
+async function abaDoTrello() {
+  try {
+    const abas = await chrome.tabs.query({ url: "https://trello.com/*" });
+    return abas && abas.length ? abas[0] : null;
+  } catch (e) { return null; }
+}
+
+/* 1) de dentro da página do Trello: mesmo site, sem CSRF, sem CORS */
+async function viaPagina(tabId, caminhos) {
+  const [res] = await chrome.scripting.executeScript({
+    target: { tabId },
+    args: [caminhos],
+    func: async (caminhos) => {
+      const out = [];
+      for (const c of caminhos) {
+        const r = await fetch("/1" + c, { credentials: "include" });
+        if (!r.ok) return { erro: "HTTP " + r.status };
+        out.push(await r.json());
+      }
+      return { ok: out };
+    }
+  });
+  return res && res.result;
+}
+
+/* 2) direto da extensão, com o token dsc na URL — é o que o próprio cliente
+      web do Trello faz para provar que o pedido não é falsificado */
+let _dsc;
+async function pegarDsc() {
+  if (_dsc !== undefined) return _dsc;
+  try {
+    const c = await chrome.cookies.get({ url: "https://trello.com/", name: "dsc" });
+    _dsc = c ? c.value : "";
+  } catch (e) { _dsc = ""; }
+  return _dsc;
+}
+
+async function direto(caminho, comDsc) {
+  let url = "https://api.trello.com/1" + caminho;
+  if (comDsc) {
+    const d = await pegarDsc();
+    if (!d) return { erro: "sem o cookie dsc" };
+    url += (caminho.includes("?") ? "&" : "?") + "dsc=" + encodeURIComponent(d);
+  }
+  const r = await fetch(url, { credentials: "include" });
+  if (!r.ok) return { erro: "HTTP " + r.status };
+  return { ok: [await r.json()] };
+}
+
+async function api(caminho) { return (await apiVarios([caminho]))[0]; }
+
+async function apiVarios(caminhos) {
+  const aba = await abaDoTrello();
+  if (aba) {
+    try {
+      const r = await viaPagina(aba.id, caminhos);
+      if (r && r.ok) return r.ok;
+      diagnostico.push(`pela aba do Trello: ${(r && r.erro) || "sem resposta"}`);
+    } catch (e) {
+      diagnostico.push(`pela aba do Trello: ${e.message || e}`);
+    }
+  } else {
+    diagnostico.push("pela aba do Trello: nenhuma aba do trello.com aberta");
+  }
+
+  for (const comDsc of [true, false]) {
+    const saida = [];
+    let falhou = null;
+    for (const c of caminhos) {
+      const r = await direto(c, comDsc);
+      if (r.erro) { falhou = r.erro; break; }
+      saida.push(r.ok[0]);
+    }
+    if (!falhou) return saida;
+    diagnostico.push(`direto da extensão${comDsc ? " com dsc" : " só com cookie"}: ${falhou}`);
+  }
+
+  const e = new Error("nenhum caminho funcionou");
+  e.diagnostico = true;
+  throw e;
+}
+
+function telaSemSessao(titulo) {
+  $("#titulo").textContent = titulo;
+  const linhas = diagnostico.map(d => `<li>${escapar(d)}</li>`).join("");
+  return telaCentro(`<b>Não consegui ler seus dados do Trello.</b>
+    O jeito mais confiável é deixar um board aberto numa aba e clicar no ícone
+    a partir dele.
+    <div class="aviso ruim" style="text-align:left; margin-top:14px">
+      <b>O que eu tentei:</b><ul>${linhas}</ul>
+    </div>`);
 }
 
 /* Se a aba já está num board, usa ele. Se não, mostra a lista para escolher —
@@ -74,12 +169,8 @@ async function telaEscolherBoard() {
   try {
     boards = await api("/members/me/boards?fields=name,shortLink&filter=open");
   } catch (e) {
+    if (e.diagnostico) return telaSemSessao("Não consegui listar seus boards");
     $("#titulo").textContent = "Não consegui falar com o Trello";
-    if (e.status === 401) {
-      return telaCentro(`<b>O Trello não reconheceu a sessão.</b>
-        A extensão usa o login que você já tem no navegador — confira se está
-        logado em trello.com nesta mesma janela do Chrome.`);
-    }
     return telaCentro(`<b>Algo deu errado.</b> ${escapar(e.message || "")}`);
   }
 
@@ -105,15 +196,13 @@ async function telaEscolherBoard() {
 async function abrirBoard(shortLink) {
   let cards;
   try {
-    board = await api(`/boards/${shortLink}?fields=name`);
-    cards = await api(`/boards/${shortLink}/cards?fields=name&attachments=true`);
+    [board, cards] = await apiVarios([
+      `/boards/${shortLink}?fields=name`,
+      `/boards/${shortLink}/cards?fields=name&attachments=true`
+    ]);
   } catch (e) {
+    if (e.diagnostico) return telaSemSessao("Não consegui ler o board");
     $("#titulo").textContent = "Não consegui ler o board";
-    if (e.status === 401) {
-      return telaCentro(`<b>O Trello não reconheceu a sessão.</b>
-        A extensão usa o login que você já tem no navegador — confira se está
-        logado em trello.com nesta mesma janela do Chrome.`);
-    }
     return telaCentro(`<b>Algo deu errado ao falar com o Trello.</b>
       ${escapar(e.message || "")}`);
   }

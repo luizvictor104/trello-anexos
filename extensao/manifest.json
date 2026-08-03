@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Baixa os anexos de um board do Trello com o nome certo, em pastas por cartão.",
 
-  "permissions": ["downloads", "activeTab"],
+  "permissions": ["downloads", "activeTab", "tabs", "scripting", "cookies"],
 
   "host_permissions": [
     "https://trello.com/*",
