@@ -48,7 +48,11 @@ function ehArquivo(a) {
 function nomeSeguro(nome) {
   return String(nome || "arquivo")
     .replace(/[\/\\]/g, "—")
-    .replace(/[<>:"|?*\x00-\x1f]/g, "")
+    // "Social Media | Lighthouse" virava "Social Media  Lighthouse", com
+    // espaço duplo: apagar a barra deixa o buraco. Vira travessão.
+    .replace(/[|]/g, "—")
+    .replace(/[<>:"?*\x00-\x1f]/g, "")
+    .replace(/\s{2,}/g, " ")
     .replace(/^[.\s]+|[.\s]+$/g, "")
     .slice(0, 120) || "arquivo";
 }
@@ -227,11 +231,12 @@ async function telaEscolherBoard() {
 }
 
 async function abrirBoard(shortLink) {
-  let cards;
+  let cards, listas;
   try {
-    [board, cards] = await apiVarios([
+    [board, listas, cards] = await apiVarios([
       `/boards/${shortLink}?fields=name`,
-      `/boards/${shortLink}/cards?fields=name&attachments=true`
+      `/boards/${shortLink}/lists?fields=name`,
+      `/boards/${shortLink}/cards?fields=name,idList&attachments=true`
     ]);
   } catch (e) {
     if (e.diagnostico) return telaSemSessao("Não consegui ler o board");
@@ -240,9 +245,12 @@ async function abrirBoard(shortLink) {
       ${escapar(e.message || "")}`);
   }
 
+  const nomeDaLista = {};
+  (listas || []).forEach(l => { nomeDaLista[l.id] = l.name; });
+
   let idx = 0;
   grupos = (cards || []).map(c => {
-    const lista = (c.attachments || []).map(a => ({
+    const arquivos = (c.attachments || []).map(a => ({
       idx: idx++,
       nome: a.fileName || a.name || "arquivo",
       bytes: a.bytes,
@@ -251,7 +259,7 @@ async function abrirBoard(shortLink) {
       arquivo: ehArquivo(a),
       marcado: true
     })).filter(i => i.arquivo);   // link não é arquivo: não há o que salvar
-    return { nome: c.name, itens: lista };
+    return { nome: c.name, lista: nomeDaLista[c.idList] || "", itens: arquivos, aberto: false };
   }).filter(g => g.itens.length);
 
   itens = grupos.flatMap(g => g.itens);
@@ -278,14 +286,22 @@ function telaLista() {
       <button id="dTodos">Desmarcar todos</button>
     </div>`;
 
-  html += grupos.map((g, gi) => `
+  // Cartões nascem fechados: com 40 cartões a lista aberta é ilegível.
+  html += grupos.map((g, gi) => {
+    const soma = g.itens.reduce((s, i) => s + (i.bytes || 0), 0);
+    return `
     <div class="grupo">
-      <label class="cab">
-        <input type="checkbox" data-g="${gi}" checked>
-        <b>${escapar(g.nome)}</b>
-        <span>${g.itens.length} anexo${g.itens.length === 1 ? "" : "s"}</span>
-      </label>
-      ${g.itens.map(i => `
+      <div class="cab" id="cab${gi}">
+        <input type="checkbox" data-g="${gi}" checked title="Marcar o cartão inteiro">
+        <button class="expandir" data-x="${gi}" aria-expanded="false">
+          <span class="seta">▶</span>
+          <b>${escapar(g.nome)}</b>
+          ${g.lista ? `<span class="lista">${escapar(g.lista)}</span>` : ""}
+          <span class="conta">${g.itens.length} · ${kb(soma)}</span>
+        </button>
+      </div>
+      <div class="itens" id="itens${gi}" hidden>
+        ${g.itens.map(i => `
         <label class="item">
           <input type="checkbox" data-i="${i.idx}" ${i.marcado ? "checked" : ""}>
           <span class="nome">
@@ -294,10 +310,22 @@ function telaLista() {
           </span>
           <span class="estado" id="e${i.idx}"></span>
         </label>`).join("")}
-    </div>`).join("");
+      </div>
+    </div>`;
+  }).join("");
 
   $("#corpo").innerHTML = html;
   $("#rodape").hidden = false;
+
+  $("#corpo").addEventListener("click", e => {
+    const btn = e.target.closest("button.expandir");
+    if (!btn) return;
+    const gi = +btn.dataset.x;
+    grupos[gi].aberto = !grupos[gi].aberto;
+    $("#itens" + gi).hidden = !grupos[gi].aberto;
+    btn.setAttribute("aria-expanded", String(grupos[gi].aberto));
+    $("#cab" + gi).toggleAttribute("aberto", grupos[gi].aberto);
+  });
 
   $("#corpo").addEventListener("change", e => {
     const cb = e.target.closest("input[type=checkbox]");
@@ -337,9 +365,107 @@ function marcarTodos(v) {
 }
 
 function atualizarBotao() {
-  const n = itens.filter(i => i.marcado).length;
+  const marcados = itens.filter(i => i.marcado);
+  const n = marcados.length;
   $("#baixar").disabled = n === 0;
   $("#baixar").textContent = n === 0 ? "Baixar" : `Baixar ${n} arquivo${n === 1 ? "" : "s"}`;
+  const zip = $("#porZip");
+  zip.hidden = n === 0;
+  const soma = marcados.reduce((s, i) => s + (i.bytes || 0), 0);
+  zip.textContent = `Baixar num .zip (${kb(soma)})`;
+  zip.disabled = false;
+}
+
+/* ---------- zip ----------
+   Possível só aqui: montar o zip exige LER os bytes de cada anexo, e é
+   exatamente essa leitura que o navegador bloqueia numa página comum. A
+   extensão tem host_permissions para trello.com, então pode ler.
+
+   Custa caro, e por isso não é o botão principal: o arquivo inteiro é montado
+   na memória antes de ser gravado, nada é salvo até o último anexo chegar, e
+   fechar esta janela no meio perde tudo. Baixar um a um não tem nenhum desses
+   problemas. */
+const LIMITE_ZIP = 700 * 1048576;
+
+/* Os endpoints da API recusam com 400 quando o pedido vem de fora do site sem
+   o token dsc. O endpoint do arquivo em si parece só olhar o cookie — o
+   download por arquivo funciona sem dsc —, mas ler por fetch é outro caminho,
+   então tenta sem e, se recusar, de novo com. */
+async function lerAnexo(url) {
+  let r = await fetch(url, { credentials: "include" });
+  if (r.ok || (r.status !== 400 && r.status !== 401)) return r;
+  const d = await pegarDsc();
+  if (!d) return r;
+  const comDsc = url + (url.includes("?") ? "&" : "?") + "dsc=" + encodeURIComponent(d);
+  const r2 = await fetch(comDsc, { credentials: "include" });
+  return r2.ok ? r2 : r;
+}
+
+async function baixarZip() {
+  const alvos = itens.filter(i => i.marcado);
+  if (!alvos.length) return;
+
+  const soma = alvos.reduce((s, i) => s + (i.bytes || 0), 0);
+  if (soma > LIMITE_ZIP) {
+    $("#progresso").innerHTML = `<span class="erro">${kb(soma)} é demais para um zip
+      no navegador.</span>`;
+    const box = document.createElement("div");
+    box.id = "diag-box"; box.className = "aviso ruim";
+    box.innerHTML = `<b>O zip é montado inteiro na memória antes de ser gravado.</b>
+      Com ${kb(soma)} o Chrome trava ou fica sem memória. Marque menos cartões,
+      ou use o botão <b>Baixar</b>, que grava um arquivo por vez e não tem limite.`;
+    const antigo = $("#diag-box"); if (antigo) antigo.remove();
+    $("#corpo").prepend(box);
+    return;
+  }
+
+  $("#baixar").disabled = true; $("#porZip").disabled = true;
+  $$("#corpo input").forEach(c => c.disabled = true);
+  const antigo = $("#diag-box"); if (antigo) antigo.remove();
+  alvos.forEach(i => { i.erro = null;
+    const el = $("#e" + i.idx); if (el) { el.textContent = "…"; el.className = "estado"; } });
+
+  const prontos = [];
+  let falhas = 0, feitos = 0;
+  for (const i of alvos) {
+    const el = $("#e" + i.idx);
+    try {
+      const r = await lerAnexo(i.url);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      prontos.push({ nome: i.nome, pasta: i.cartao, data: new Date(),
+                     dados: new Uint8Array(await r.arrayBuffer()) });
+      if (el) { el.textContent = "✓"; el.className = "estado ok"; }
+    } catch (e) {
+      falhas++; i.erro = e.message || String(e);
+      if (el) { el.textContent = i.erro; el.className = "estado erro"; }
+    }
+    feitos++;
+    $("#progresso").textContent = `lendo ${feitos} de ${alvos.length}`;
+  }
+
+  if (!prontos.length) {
+    $("#progresso").innerHTML = `<span class="erro">Nenhum anexo pôde ser lido. O zip não foi criado.</span>`;
+    mostrarDiagnostico();
+    $("#baixar").disabled = false; $("#porZip").disabled = false;
+    $$("#corpo input").forEach(c => c.disabled = false);
+    return;
+  }
+
+  $("#progresso").textContent = "montando o zip…";
+  const blob = new Blob([ZipSimples.criarZip(prontos)], { type: "application/zip" });
+  const url = URL.createObjectURL(blob);
+  const r = await baixarUrl(url, nomeSeguro(board.name || "board") + " — anexos.zip");
+  URL.revokeObjectURL(url);
+
+  $("#progresso").innerHTML = r.ok
+    ? (falhas
+        ? `<span class="erro">${falhas} não entrou(ram)</span> · ${prontos.length} no zip`
+        : `<span class="ok">Pronto — ${prontos.length} arquivo${prontos.length === 1 ? "" : "s"} no zip</span>`)
+    : `<span class="erro">O zip ficou pronto mas não salvou: ${escapar(r.erro)}</span>`;
+  if (falhas) mostrarDiagnostico();
+
+  $("#baixar").disabled = false; $("#porZip").disabled = false;
+  $$("#corpo input").forEach(c => c.disabled = false);
 }
 
 /* ---------- baixar ----------
@@ -347,10 +473,13 @@ function atualizarBotao() {
    "complete". O Power-Up antigo carimbava sucesso logo depois de PEDIR o
    arquivo, e foi por isso que a falha passou meses despercebida. */
 function baixarUm(item) {
-  const caminho = [board.name, item.cartao, item.nome].map(nomeSeguro).join("/");
+  return baixarUrl(item.url, [board.name, item.cartao, item.nome].map(nomeSeguro).join("/"));
+}
+
+function baixarUrl(url, caminho) {
   return new Promise(resolve => {
     chrome.downloads.download(
-      { url: item.url, filename: caminho, conflictAction: "uniquify" },
+      { url, filename: caminho, conflictAction: "uniquify" },
       id => {
         if (chrome.runtime.lastError || id === undefined) {
           return resolve({ ok: false, erro: (chrome.runtime.lastError || {}).message || "recusado pelo Chrome" });
@@ -427,6 +556,7 @@ function mostrarDiagnostico() {
 }
 
 $("#baixar").onclick = baixarTudo;
+$("#porZip").onclick = baixarZip;
 
 carregar().catch(e => {
   console.error(e);
