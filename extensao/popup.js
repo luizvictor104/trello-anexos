@@ -251,11 +251,9 @@ async function abrirBoard(shortLink) {
      que o Trello devolve, que é a ordem das colunas na tela — mais fácil de
      reconhecer do que alfabética. Listas sem nenhum anexo somem: elas não
      têm o que baixar e só alongariam a rolagem. */
-  let idx = 0, ci = 0;
   const porLista = new Map();
   (cards || []).forEach(c => {
     const arquivos = (c.attachments || []).map(a => ({
-      idx: idx++,
       nome: a.fileName || a.name || "arquivo",
       bytes: a.bytes,
       url: a.url,
@@ -265,15 +263,22 @@ async function abrirBoard(shortLink) {
     })).filter(i => i.arquivo);   // link não é arquivo: não há o que salvar
     if (!arquivos.length) return;
     if (!porLista.has(c.idList)) porLista.set(c.idList, []);
-    porLista.get(c.idList).push({ ci: ci++, nome: c.name, itens: arquivos, aberto: false });
+    porLista.get(c.idList).push({ nome: c.name, itens: arquivos, aberto: false });
   });
 
   listas = (listasApi || [])
     .filter(l => porLista.has(l.id))
     .map(l => ({ nome: l.name, cartoes: porLista.get(l.id), aberto: false }));
 
+  /* Os índices são atribuídos SÓ AQUI, depois de achatar na ordem final da
+     tela. Numerar antes era um bug: o Trello devolve os cartões numa ordem, a
+     tela os agrupa por lista noutra, e aí cartoes[3] não era o cartão de
+     índice 3 — clicar num cartão marcava o vizinho. Quem é lido por posição
+     tem que ser numerado por posição. */
   cartoes = listas.flatMap(l => l.cartoes);
+  cartoes.forEach((c, i) => { c.ci = i; });
   itens = cartoes.flatMap(c => c.itens);
+  itens.forEach((it, i) => { it.idx = i; });
 
   if (!itens.length) {
     $("#titulo").textContent = board.name || "Board";
