@@ -480,27 +480,32 @@ async function baixarTudo() {
   alvos.forEach(i => { i.erro = null;
     const el = $("#e" + i.idx); if (el) { el.textContent = "…"; el.className = "estado"; } });
 
+  /* TODOS os pedidos vão para o Chrome de uma vez, sem esperar um terminar
+     para pedir o próximo.
+
+     Antes havia uma fila de 4 por vez, e isso perdia arquivos: esta janela é
+     um popup, e o Chrome a fecha sozinha quando ela perde o foco — o que
+     acontece justamente quando a barra de downloads aparece. Com a janela
+     morta, ninguém pedia o resto, e chegavam exatamente os 4 da primeira leva.
+
+     Depois de pedidos, os downloads são do Chrome: continuam mesmo com a
+     janela fechada. O acompanhamento abaixo é só enfeite para quem deixar
+     aberto. */
   let feitos = 0, falhas = 0;
-  const FILA = 4;   // o Chrome dá conta de mais, mas 4 mantém a barra de downloads legível
-  const pendentes = alvos.slice();
-
-  async function trabalhador() {
-    while (pendentes.length) {
-      const i = pendentes.shift();
-      const r = await baixarUm(i);
-      const el = $("#e" + i.idx);
-      if (r.ok) {
-        if (el) { el.textContent = "✓"; el.className = "estado ok"; }
-      } else {
-        falhas++; i.erro = r.erro;
-        if (el) { el.textContent = r.erro; el.className = "estado erro"; }
-      }
-      feitos++;
-      $("#progresso").textContent = `${feitos} de ${alvos.length}`;
+  const acompanhar = alvos.map(i => baixarUm(i).then(r => {
+    const el = $("#e" + i.idx);
+    if (r.ok) {
+      if (el) { el.textContent = "✓"; el.className = "estado ok"; }
+    } else {
+      falhas++; i.erro = r.erro;
+      if (el) { el.textContent = r.erro; el.className = "estado erro"; }
     }
-  }
+    feitos++;
+    $("#progresso").textContent = `${feitos} de ${alvos.length}`;
+  }));
 
-  await Promise.all(Array.from({ length: Math.min(FILA, alvos.length) }, trabalhador));
+  $("#progresso").textContent = `${alvos.length} pedidos ao Chrome — pode fechar esta janela`;
+  await Promise.all(acompanhar);
 
   $("#progresso").innerHTML = falhas
     ? `<span class="erro">${falhas} falhou(ram)</span> · ${alvos.length - falhas} salvo${alvos.length - falhas === 1 ? "" : "s"}`
