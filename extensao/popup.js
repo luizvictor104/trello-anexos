@@ -24,7 +24,7 @@
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 
-let board = null, grupos = [], itens = [];
+let board = null, listas = [], cartoes = [], itens = [];
 
 const kb = n => {
   if (n == null || !isFinite(n)) return "";
@@ -231,9 +231,9 @@ async function telaEscolherBoard() {
 }
 
 async function abrirBoard(shortLink) {
-  let cards, listas;
+  let cards, listasApi;
   try {
-    [board, listas, cards] = await apiVarios([
+    [board, listasApi, cards] = await apiVarios([
       `/boards/${shortLink}?fields=name`,
       `/boards/${shortLink}/lists?fields=name`,
       `/boards/${shortLink}/cards?fields=name,idList&attachments=true`
@@ -245,11 +245,13 @@ async function abrirBoard(shortLink) {
       ${escapar(e.message || "")}`);
   }
 
-  const nomeDaLista = {};
-  (listas || []).forEach(l => { nomeDaLista[l.id] = l.name; });
-
-  let idx = 0;
-  grupos = (cards || []).map(c => {
+  /* A tela espelha o board: lista → cartão → anexo. A ordem das listas é a
+     que o Trello devolve, que é a ordem das colunas na tela — mais fácil de
+     reconhecer do que alfabética. Listas sem nenhum anexo somem: elas não
+     têm o que baixar e só alongariam a rolagem. */
+  let idx = 0, ci = 0;
+  const porLista = new Map();
+  (cards || []).forEach(c => {
     const arquivos = (c.attachments || []).map(a => ({
       idx: idx++,
       nome: a.fileName || a.name || "arquivo",
@@ -259,10 +261,17 @@ async function abrirBoard(shortLink) {
       arquivo: ehArquivo(a),
       marcado: true
     })).filter(i => i.arquivo);   // link não é arquivo: não há o que salvar
-    return { nome: c.name, lista: nomeDaLista[c.idList] || "", itens: arquivos, aberto: false };
-  }).filter(g => g.itens.length);
+    if (!arquivos.length) return;
+    if (!porLista.has(c.idList)) porLista.set(c.idList, []);
+    porLista.get(c.idList).push({ ci: ci++, nome: c.name, itens: arquivos, aberto: false });
+  });
 
-  itens = grupos.flatMap(g => g.itens);
+  listas = (listasApi || [])
+    .filter(l => porLista.has(l.id))
+    .map(l => ({ nome: l.name, cartoes: porLista.get(l.id), aberto: false }));
+
+  cartoes = listas.flatMap(l => l.cartoes);
+  itens = cartoes.flatMap(c => c.itens);
 
   if (!itens.length) {
     $("#titulo").textContent = board.name || "Board";
@@ -272,11 +281,17 @@ async function abrirBoard(shortLink) {
 }
 
 /* ---------- tela ---------- */
+const peso = arr => arr.reduce((s, i) => s + (i.bytes || 0), 0);
+const plural = (n, s, p) => `${n} ${n === 1 ? s : (p || s + "s")}`;
+
 function telaLista() {
-  const total = itens.reduce((s, i) => s + (i.bytes || 0), 0);
   $("#titulo").textContent = board.name || "Board";
-  $("#sub").textContent = `${grupos.length} cartão${grupos.length === 1 ? "" : "es"} com anexo · `
-    + `${itens.length} arquivo${itens.length === 1 ? "" : "s"}` + (total ? ` · ${kb(total)}` : "");
+  $("#sub").textContent = [
+    plural(listas.length, "lista"),
+    plural(cartoes.length, "cartão", "cartões"),
+    plural(itens.length, "arquivo"),
+    kb(peso(itens))
+  ].join(" · ");
 
   let html = `<div class="aviso">Os arquivos vão para
     <code>Downloads/${escapar(nomeSeguro(board.name))}/</code>, numa pasta por cartão.</div>`;
@@ -286,33 +301,45 @@ function telaLista() {
       <button id="dTodos">Desmarcar todos</button>
     </div>`;
 
-  // Cartões nascem fechados: com 40 cartões a lista aberta é ilegível.
-  html += grupos.map((g, gi) => {
-    const soma = g.itens.reduce((s, i) => s + (i.bytes || 0), 0);
-    return `
-    <div class="grupo">
-      <div class="cab" id="cab${gi}">
-        <input type="checkbox" data-g="${gi}" checked title="Marcar o cartão inteiro">
-        <button class="expandir" data-x="${gi}" aria-expanded="false">
+  /* Tudo nasce fechado. A caixa de marcar fica sempre FORA do botão que abre,
+     senão marcar uma lista a expandiria junto. */
+  html += listas.map((l, li) => `
+    <div class="nivel lista">
+      <div class="cab" id="lcab${li}">
+        <input type="checkbox" data-l="${li}" checked title="Marcar a lista inteira">
+        <button class="expandir" data-lx="${li}" aria-expanded="false">
           <span class="seta">▶</span>
-          <b>${escapar(g.nome)}</b>
-          ${g.lista ? `<span class="lista">${escapar(g.lista)}</span>` : ""}
-          <span class="conta">${g.itens.length} · ${kb(soma)}</span>
+          <b>${escapar(l.nome)}</b>
+          <span class="conta">${plural(l.cartoes.length, "cartão", "cartões")} ·
+            ${plural(l.cartoes.reduce((s, c) => s + c.itens.length, 0), "anexo")} ·
+            ${kb(peso(l.cartoes.flatMap(c => c.itens)))}</span>
         </button>
       </div>
-      <div class="itens" id="itens${gi}" hidden>
-        ${g.itens.map(i => `
-        <label class="item">
-          <input type="checkbox" data-i="${i.idx}" ${i.marcado ? "checked" : ""}>
-          <span class="nome">
-            <b>${escapar(i.nome)}</b>
-            <span>${kb(i.bytes)}</span>
-          </span>
-          <span class="estado" id="e${i.idx}"></span>
-        </label>`).join("")}
+      <div class="filhos" id="lfilhos${li}" hidden>
+        ${l.cartoes.map(c => `
+        <div class="nivel cartao">
+          <div class="cab" id="ccab${c.ci}">
+            <input type="checkbox" data-c="${c.ci}" checked title="Marcar o cartão inteiro">
+            <button class="expandir" data-cx="${c.ci}" aria-expanded="false">
+              <span class="seta">▶</span>
+              <b>${escapar(c.nome)}</b>
+              <span class="conta">${plural(c.itens.length, "anexo")} · ${kb(peso(c.itens))}</span>
+            </button>
+          </div>
+          <div class="filhos" id="cfilhos${c.ci}" hidden>
+            ${c.itens.map(i => `
+            <label class="item">
+              <input type="checkbox" data-i="${i.idx}" ${i.marcado ? "checked" : ""}>
+              <span class="nome">
+                <b>${escapar(i.nome)}</b>
+                <span>${kb(i.bytes)}</span>
+              </span>
+              <span class="estado" id="e${i.idx}"></span>
+            </label>`).join("")}
+          </div>
+        </div>`).join("")}
       </div>
-    </div>`;
-  }).join("");
+    </div>`).join("");
 
   $("#corpo").innerHTML = html;
   $("#rodape").hidden = false;
@@ -320,41 +347,69 @@ function telaLista() {
   $("#corpo").addEventListener("click", e => {
     const btn = e.target.closest("button.expandir");
     if (!btn) return;
-    const gi = +btn.dataset.x;
-    grupos[gi].aberto = !grupos[gi].aberto;
-    $("#itens" + gi).hidden = !grupos[gi].aberto;
-    btn.setAttribute("aria-expanded", String(grupos[gi].aberto));
-    $("#cab" + gi).toggleAttribute("aberto", grupos[gi].aberto);
+    if (btn.dataset.lx !== undefined) {
+      const l = listas[+btn.dataset.lx];
+      alternar(l, btn, $("#lfilhos" + btn.dataset.lx), $("#lcab" + btn.dataset.lx));
+    } else {
+      const c = cartoes[+btn.dataset.cx];
+      alternar(c, btn, $("#cfilhos" + btn.dataset.cx), $("#ccab" + btn.dataset.cx));
+    }
   });
 
   $("#corpo").addEventListener("change", e => {
     const cb = e.target.closest("input[type=checkbox]");
     if (!cb) return;
-    if (cb.dataset.g !== undefined) {
-      const g = grupos[+cb.dataset.g];
-      g.itens.forEach(i => {
-        i.marcado = cb.checked;
-        const el = $(`#corpo input[data-i="${i.idx}"]`);
-        if (el) el.checked = cb.checked;
-      });
+    if (cb.dataset.l !== undefined) {
+      listas[+cb.dataset.l].cartoes.forEach(c => marcarCartao(c, cb.checked));
+    } else if (cb.dataset.c !== undefined) {
+      marcarCartao(cartoes[+cb.dataset.c], cb.checked);
     } else {
       itens[+cb.dataset.i].marcado = cb.checked;
-      sincronizarCabecalhos();
     }
+    sincronizar();
     atualizarBotao();
   });
+
   $("#mTodos").onclick = () => marcarTodos(true);
   $("#dTodos").onclick = () => marcarTodos(false);
+  sincronizar();
   atualizarBotao();
 }
 
-function sincronizarCabecalhos() {
-  grupos.forEach((g, gi) => {
-    const cb = $(`#corpo input[data-g="${gi}"]`);
-    if (!cb) return;
-    const n = g.itens.filter(i => i.marcado).length;
-    cb.checked = n === g.itens.length;
-    cb.indeterminate = n > 0 && n < g.itens.length;
+function alternar(no, btn, filhos, cab) {
+  no.aberto = !no.aberto;
+  filhos.hidden = !no.aberto;
+  btn.setAttribute("aria-expanded", String(no.aberto));
+  cab.toggleAttribute("aberto", no.aberto);
+}
+
+function marcarCartao(c, v) {
+  c.itens.forEach(i => i.marcado = v);
+  const el = $(`#corpo input[data-c="${c.ci}"]`);
+  if (el) { el.checked = v; el.indeterminate = false; }
+  c.itens.forEach(i => {
+    const ei = $(`#corpo input[data-i="${i.idx}"]`);
+    if (ei) ei.checked = v;
+  });
+}
+
+/* Uma caixa de nível acima fica "meio marcada" quando só parte do que está
+   dentro dela está marcado — é o que o Trello faz e o que se espera. */
+function tresEstados(cb, marcados, total) {
+  if (!cb) return;
+  cb.checked = marcados === total;
+  cb.indeterminate = marcados > 0 && marcados < total;
+}
+
+function sincronizar() {
+  cartoes.forEach(c => {
+    tresEstados($(`#corpo input[data-c="${c.ci}"]`),
+      c.itens.filter(i => i.marcado).length, c.itens.length);
+  });
+  listas.forEach((l, li) => {
+    const dentro = l.cartoes.flatMap(c => c.itens);
+    tresEstados($(`#corpo input[data-l="${li}"]`),
+      dentro.filter(i => i.marcado).length, dentro.length);
   });
 }
 
@@ -368,14 +423,12 @@ function atualizarBotao() {
   const marcados = itens.filter(i => i.marcado);
   const n = marcados.length;
   $("#baixar").disabled = n === 0;
-  $("#baixar").textContent = n === 0 ? "Baixar" : `Baixar ${n} arquivo${n === 1 ? "" : "s"}`;
+  $("#baixar").textContent = n === 0 ? "Baixar" : `Baixar ${plural(n, "arquivo")}`;
   const zip = $("#porZip");
   zip.hidden = n === 0;
-  const soma = marcados.reduce((s, i) => s + (i.bytes || 0), 0);
-  zip.textContent = `Baixar num .zip (${kb(soma)})`;
+  zip.textContent = `Baixar num .zip (${kb(peso(marcados))})`;
   zip.disabled = false;
 }
-
 /* ---------- zip ----------
    Possível só aqui: montar o zip exige LER os bytes de cada anexo, e é
    exatamente essa leitura que o navegador bloqueia numa página comum. A

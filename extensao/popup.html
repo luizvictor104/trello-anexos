@@ -30,27 +30,32 @@ button{font:inherit; font-weight:500; border:0; border-radius:3px; cursor:pointe
 button:hover:not(:disabled){background:var(--azul2)}
 button:disabled{opacity:.5; cursor:default}
 
-.grupo{margin:0}
-.grupo .cab{display:flex; align-items:center; gap:8px; padding:0 2px; border-bottom:1px solid var(--linha)}
-.grupo .cab input{width:14px; height:14px; accent-color:var(--azul); flex:none; cursor:pointer}
-/* o cabeçalho inteiro é um botão: clicar no cartão abre e fecha a lista dele.
-   A caixa de marcar fica FORA do botão, senão marcar um cartão o abriria. */
-.grupo .cab .expandir{flex:1; min-width:0; display:flex; align-items:center; gap:8px;
+/* Três níveis: lista → cartão → anexo. Cada um recua um pouco mais e fica um
+   pouco mais discreto, para a hierarquia se ler sem precisar de moldura. */
+.nivel .cab{display:flex; align-items:center; gap:8px; padding:0 2px; border-bottom:1px solid var(--linha)}
+.nivel .cab input{width:14px; height:14px; accent-color:var(--azul); flex:none; cursor:pointer}
+/* o cabeçalho é um botão: clicar abre e fecha. A caixa de marcar fica FORA
+   dele, senão marcar uma lista ou um cartão o expandiria junto. */
+.nivel .cab .expandir{flex:1; min-width:0; display:flex; align-items:center; gap:8px;
   background:none; color:inherit; border:0; padding:8px 2px; font:inherit; text-align:left; cursor:pointer}
-.grupo .cab .expandir:hover{background:none}
-.grupo .cab .expandir:hover b{color:var(--azul)}
-.grupo .cab .seta{flex:none; width:10px; font-size:9px; color:var(--ink2); transition:transform .12s}
-.grupo .cab[aberto] .seta{transform:rotate(90deg)}
-.grupo .cab b{font-size:12.5px; font-weight:600; flex:1; min-width:0;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.grupo .cab .lista{flex:none; font-size:10.5px; color:var(--ink2); background:var(--bg2);
-  border:1px solid var(--linha); border-radius:9px; padding:1px 7px; max-width:130px;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.grupo .cab .conta{font-size:11px; color:var(--ink2); flex:none}
+.nivel .cab .expandir:hover{background:none}
+.nivel .cab .expandir:hover b{color:var(--azul)}
+.nivel .cab .seta{flex:none; width:10px; font-size:9px; color:var(--ink2); transition:transform .12s}
+.nivel .cab[aberto] .seta{transform:rotate(90deg)}
+.nivel .cab b{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.nivel .cab .conta{font-size:11px; color:var(--ink2); flex:none}
+
+.nivel.lista > .cab b{font-size:13px; font-weight:600}
+.nivel.lista > .cab[aberto]{border-bottom-color:transparent}
+.nivel.cartao{margin-left:22px}
+.nivel.cartao > .cab b{font-size:12.5px; font-weight:400}
+.nivel.cartao > .cab .conta{font-size:10.5px}
+.nivel.cartao .item{padding-left:24px}
+.nivel .filhos{padding-bottom:2px}
+
 .discreto{background:none; color:var(--azul); padding:0; font-size:12px; font-weight:400;
   border:0; cursor:pointer; font-family:inherit}
 .discreto:hover{background:none; text-decoration:underline}
-.grupo .itens{border-bottom:1px solid var(--linha); padding-bottom:2px}
 .item{display:flex; align-items:center; gap:9px; padding:7px 2px 7px 22px; border-bottom:1px solid var(--linha)}
 .item:last-child{border-bottom:0}
 .item input{width:15px; height:15px; accent-color:var(--azul); flex:none; cursor:pointer}
