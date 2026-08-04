@@ -17,9 +17,11 @@
       pode ler — é o que permite listar os anexos usando o cookie da sua
       sessão, sem token e sem tela de autorização.
 
-   Bônus: como cada arquivo vai direto para o disco, um a um, os Reels de
-   100+ MB deixam de ser um problema. O plano do .zip precisava empilhar tudo
-   na memória antes de salvar. */
+   Cada arquivo vai direto para o disco, um a um, quem grava é o Chrome. Por
+   isso não há limite de tamanho: os Reels de 100+ MB passam sem susto. Houve
+   uma tentativa de juntar tudo num .zip, abandonada — ele teria que ser
+   montado inteiro na memória antes de gravar, e a organização em pastas por
+   cartão já resolve o que o zip resolveria. */
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -259,7 +261,7 @@ async function abrirBoard(shortLink) {
       url: a.url,
       cartao: c.name,
       arquivo: ehArquivo(a),
-      marcado: true
+      marcado: false
     })).filter(i => i.arquivo);   // link não é arquivo: não há o que salvar
     if (!arquivos.length) return;
     if (!porLista.has(c.idList)) porLista.set(c.idList, []);
@@ -306,7 +308,9 @@ function telaLista() {
   html += listas.map((l, li) => `
     <div class="nivel lista">
       <div class="cab" id="lcab${li}">
-        <input type="checkbox" data-l="${li}" checked title="Marcar a lista inteira">
+        <label class="marcador" title="Marcar a lista inteira">
+          <input type="checkbox" data-l="${li}">
+        </label>
         <button class="expandir" data-lx="${li}" aria-expanded="false">
           <span class="seta">▶</span>
           <b>${escapar(l.nome)}</b>
@@ -319,7 +323,9 @@ function telaLista() {
         ${l.cartoes.map(c => `
         <div class="nivel cartao">
           <div class="cab" id="ccab${c.ci}">
-            <input type="checkbox" data-c="${c.ci}" checked title="Marcar o cartão inteiro">
+            <label class="marcador" title="Marcar o cartão inteiro">
+              <input type="checkbox" data-c="${c.ci}">
+            </label>
             <button class="expandir" data-cx="${c.ci}" aria-expanded="false">
               <span class="seta">▶</span>
               <b>${escapar(c.nome)}</b>
@@ -328,14 +334,16 @@ function telaLista() {
           </div>
           <div class="filhos" id="cfilhos${c.ci}" hidden>
             ${c.itens.map(i => `
-            <label class="item">
-              <input type="checkbox" data-i="${i.idx}" ${i.marcado ? "checked" : ""}>
+            <div class="item">
+              <label class="marcador">
+                <input type="checkbox" data-i="${i.idx}" ${i.marcado ? "checked" : ""}>
+              </label>
               <span class="nome">
                 <b>${escapar(i.nome)}</b>
                 <span>${kb(i.bytes)}</span>
               </span>
               <span class="estado" id="e${i.idx}"></span>
-            </label>`).join("")}
+            </div>`).join("")}
           </div>
         </div>`).join("")}
       </div>
@@ -424,103 +432,7 @@ function atualizarBotao() {
   const n = marcados.length;
   $("#baixar").disabled = n === 0;
   $("#baixar").textContent = n === 0 ? "Baixar" : `Baixar ${plural(n, "arquivo")}`;
-  const zip = $("#porZip");
-  zip.hidden = n === 0;
-  zip.textContent = `Baixar num .zip (${kb(peso(marcados))})`;
-  zip.disabled = false;
 }
-/* ---------- zip ----------
-   Possível só aqui: montar o zip exige LER os bytes de cada anexo, e é
-   exatamente essa leitura que o navegador bloqueia numa página comum. A
-   extensão tem host_permissions para trello.com, então pode ler.
-
-   Custa caro, e por isso não é o botão principal: o arquivo inteiro é montado
-   na memória antes de ser gravado, nada é salvo até o último anexo chegar, e
-   fechar esta janela no meio perde tudo. Baixar um a um não tem nenhum desses
-   problemas. */
-const LIMITE_ZIP = 700 * 1048576;
-
-/* Os endpoints da API recusam com 400 quando o pedido vem de fora do site sem
-   o token dsc. O endpoint do arquivo em si parece só olhar o cookie — o
-   download por arquivo funciona sem dsc —, mas ler por fetch é outro caminho,
-   então tenta sem e, se recusar, de novo com. */
-async function lerAnexo(url) {
-  let r = await fetch(url, { credentials: "include" });
-  if (r.ok || (r.status !== 400 && r.status !== 401)) return r;
-  const d = await pegarDsc();
-  if (!d) return r;
-  const comDsc = url + (url.includes("?") ? "&" : "?") + "dsc=" + encodeURIComponent(d);
-  const r2 = await fetch(comDsc, { credentials: "include" });
-  return r2.ok ? r2 : r;
-}
-
-async function baixarZip() {
-  const alvos = itens.filter(i => i.marcado);
-  if (!alvos.length) return;
-
-  const soma = alvos.reduce((s, i) => s + (i.bytes || 0), 0);
-  if (soma > LIMITE_ZIP) {
-    $("#progresso").innerHTML = `<span class="erro">${kb(soma)} é demais para um zip
-      no navegador.</span>`;
-    const box = document.createElement("div");
-    box.id = "diag-box"; box.className = "aviso ruim";
-    box.innerHTML = `<b>O zip é montado inteiro na memória antes de ser gravado.</b>
-      Com ${kb(soma)} o Chrome trava ou fica sem memória. Marque menos cartões,
-      ou use o botão <b>Baixar</b>, que grava um arquivo por vez e não tem limite.`;
-    const antigo = $("#diag-box"); if (antigo) antigo.remove();
-    $("#corpo").prepend(box);
-    return;
-  }
-
-  $("#baixar").disabled = true; $("#porZip").disabled = true;
-  $$("#corpo input").forEach(c => c.disabled = true);
-  const antigo = $("#diag-box"); if (antigo) antigo.remove();
-  alvos.forEach(i => { i.erro = null;
-    const el = $("#e" + i.idx); if (el) { el.textContent = "…"; el.className = "estado"; } });
-
-  const prontos = [];
-  let falhas = 0, feitos = 0;
-  for (const i of alvos) {
-    const el = $("#e" + i.idx);
-    try {
-      const r = await lerAnexo(i.url);
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      prontos.push({ nome: i.nome, pasta: i.cartao, data: new Date(),
-                     dados: new Uint8Array(await r.arrayBuffer()) });
-      if (el) { el.textContent = "✓"; el.className = "estado ok"; }
-    } catch (e) {
-      falhas++; i.erro = e.message || String(e);
-      if (el) { el.textContent = i.erro; el.className = "estado erro"; }
-    }
-    feitos++;
-    $("#progresso").textContent = `lendo ${feitos} de ${alvos.length}`;
-  }
-
-  if (!prontos.length) {
-    $("#progresso").innerHTML = `<span class="erro">Nenhum anexo pôde ser lido. O zip não foi criado.</span>`;
-    mostrarDiagnostico();
-    $("#baixar").disabled = false; $("#porZip").disabled = false;
-    $$("#corpo input").forEach(c => c.disabled = false);
-    return;
-  }
-
-  $("#progresso").textContent = "montando o zip…";
-  const blob = new Blob([ZipSimples.criarZip(prontos)], { type: "application/zip" });
-  const url = URL.createObjectURL(blob);
-  const r = await baixarUrl(url, nomeSeguro(board.name || "board") + " — anexos.zip");
-  URL.revokeObjectURL(url);
-
-  $("#progresso").innerHTML = r.ok
-    ? (falhas
-        ? `<span class="erro">${falhas} não entrou(ram)</span> · ${prontos.length} no zip`
-        : `<span class="ok">Pronto — ${prontos.length} arquivo${prontos.length === 1 ? "" : "s"} no zip</span>`)
-    : `<span class="erro">O zip ficou pronto mas não salvou: ${escapar(r.erro)}</span>`;
-  if (falhas) mostrarDiagnostico();
-
-  $("#baixar").disabled = false; $("#porZip").disabled = false;
-  $$("#corpo input").forEach(c => c.disabled = false);
-}
-
 /* ---------- baixar ----------
    Cada download é acompanhado até o fim: só vira ✓ quando o Chrome diz
    "complete". O Power-Up antigo carimbava sucesso logo depois de PEDIR o
@@ -609,7 +521,6 @@ function mostrarDiagnostico() {
 }
 
 $("#baixar").onclick = baixarTudo;
-$("#porZip").onclick = baixarZip;
 
 carregar().catch(e => {
   console.error(e);

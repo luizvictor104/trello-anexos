@@ -37,24 +37,25 @@ Como os boards de social media são quase só imagem e vídeo, o download direto
 não salvava praticamente nada. Aqui isso não importa: `chrome.downloads`
 salva o que mandarmos, com o nome que mandarmos, ignorando o cabeçalho.
 
-**2. Uma página não pode ler a resposta de outro endereço.** Para montar um
-`.zip` seria preciso buscar os bytes por `fetch`, e a resposta do Trello não
-traz `access-control-allow-origin` — testado com token válido: o mesmo token
-dá 200 legível em `/1/members/me` e `Failed to fetch` no `/download/`. O
-preflight liberar não diz nada sobre a resposta real. A extensão declara
-`https://trello.com/*` em `host_permissions` e por isso pode ler, o que
-permite listar os anexos pela sessão, sem token.
+**2. Uma página não pode ler a resposta de outro endereço.** Isso impedia
+qualquer coisa que precisasse do conteúdo do arquivo, e não só da URL dele —
+por exemplo juntar tudo num `.zip`. A extensão declara `https://trello.com/*`
+em `host_permissions` e por isso pode ler, o que permite listar os cartões e
+anexos pela sua sessão, sem token e sem tela de autorização.
 
-De quebra, como cada arquivo vai direto para o disco, os Reels de 100+ MB
-deixam de ser problema. O plano do `.zip` precisava empilhar tudo na memória
-do navegador antes de salvar — no board da Danusa isso daria 2,3 GB.
+Não existe opção de `.zip`: cada arquivo é gravado direto no disco pelo Chrome,
+um a um, então não há limite de tamanho — os Reels de 100+ MB passam sem susto.
+Um zip teria que ser montado inteiro na memória antes de gravar, e as pastas
+por cartão já dão a organização que ele daria.
 
 ## O que ela pede de permissão, e por quê
 
 | Permissão | Para quê |
 |---|---|
 | `downloads` | salvar os arquivos com nome e pasta escolhidos |
-| `activeTab` | ler o endereço da aba, só para saber em que board você está |
+| `activeTab`, `tabs` | achar a aba do Trello e saber em que board você está |
+| `scripting` | rodar a consulta à API de dentro da aba do Trello, que é o único jeito que a API aceita sem token |
+| `cookies` | ler o token `dsc` da sua sessão, usado como plano B quando não há aba do Trello aberta |
 | `trello.com`, `api.trello.com` | listar os cartões e anexos usando a sua sessão |
 
 Ela não lê nenhum outro site, não manda nada para lugar nenhum e não guarda
